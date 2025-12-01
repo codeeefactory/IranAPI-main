@@ -108,8 +108,12 @@ class MongoRepository:
         self.categories = self.db["categories"]
         self.apis = self.db["apis"]
         self.pricing_plans = self.db["pricing_plans"]
+        self.subscription_plans = self.db["subscription_plans"]
         self.documentations = self.db["documentations"]
+        self.api_endpoints = self.db["api_endpoints"]
         self.access_grants = self.db["access_grants"]
+        self.user_subscriptions = self.db["user_subscriptions"]
+        self.subscription_checkouts = self.db["subscription_checkouts"]
         self.api_ratings = self.db["api_ratings"]
         self.api_usage = self.db["api_usage"]
         self.sessions = self.db["sessions"]
@@ -490,6 +494,7 @@ class MongoRepository:
         search: str | None = None,
         ordering: str | None = None,
         include_inactive: bool = False,
+        created_by_user_id: int | None = None,
     ) -> list[dict[str, Any]]:
         query = self._api_query(
             category_slug=category_slug,
@@ -499,6 +504,8 @@ class MongoRepository:
             search=search,
             include_inactive=include_inactive,
         )
+        if created_by_user_id is not None:
+            query["created_by_user_id"] = int(created_by_user_id)
         return list(self.apis.find(query).sort(self._api_sort(ordering)))
 
     def get_api_by_slug(self, slug: str, *, include_inactive: bool = False) -> dict[str, Any] | None:
@@ -540,6 +547,149 @@ class MongoRepository:
             query["api_slug"] = api_slug
         return list(self.pricing_plans.find(query).sort([("price", ASCENDING), ("name", ASCENDING)]))
 
+    def list_subscription_plans(self, *, active_only: bool = True) -> list[dict[str, Any]]:
+        query: dict[str, Any] = {}
+        if active_only:
+            query["is_active"] = True
+        return list(self.subscription_plans.find(query).sort([("sort_order", ASCENDING), ("price", ASCENDING)]))
+
+    def get_subscription_plan_by_id(self, plan_id: int, *, active_only: bool = True) -> dict[str, Any] | None:
+        query: dict[str, Any] = {"_id": int(plan_id)}
+        if active_only:
+            query["is_active"] = True
+        return self.subscription_plans.find_one(query)
+
+    def get_current_subscription(self, user_id: int) -> dict[str, Any] | None:
+        return self.user_subscriptions.find_one(
+            {"user_id": int(user_id), "status": "active"},
+            sort=[("created_at", DESCENDING)],
+        )
+
+    def get_subscription_by_id(self, *, user_id: int, subscription_id: int) -> dict[str, Any] | None:
+        return self.user_subscriptions.find_one({"_id": int(subscription_id), "user_id": int(user_id)})
+
+    def create_subscription_checkout(self, *, user_id: int, plan_id: int) -> tuple[dict[str, Any], dict[str, Any]]:
+        plan = self.get_subscription_plan_by_id(plan_id)
+        if not plan:
+            raise LookupError("Subscription plan not found.")
+
+        now = timezone.now()
+        amount = float(plan.get("price", 0) or 0)
+        checkout_id = next_id("subscription_checkouts")
+        while self.subscription_checkouts.find_one({"_id": checkout_id}, {"_id": 1}):
+            checkout_id = next_id("subscription_checkouts")
+        checkout = {
+            "_id": checkout_id,
+            "user_id": int(user_id),
+            "subscription_plan_id": int(plan["_id"]),
+            "status": "pending",
+            "amount": amount,
+            "currency": plan.get("currency", "IRR"),
+            "gateway": "manual",
+            "reference": f"chk_{checkout_id}",
+            "created_at": now,
+            "updated_at": now,
+            "expires_at": now + timedelta(minutes=30),
+            "confirmed_at": None,
+        }
+        self.subscription_checkouts.insert_one(checkout)
+        return checkout, plan
+
+    def get_subscription_checkout(self, *, user_id: int, checkout_id: int) -> tuple[dict[str, Any], dict[str, Any]] | tuple[None, None]:
+        checkout = self.subscription_checkouts.find_one({"_id": int(checkout_id), "user_id": int(user_id)})
+        if not checkout:
+            return None, None
+        if checkout.get("status") == "pending" and checkout.get("expires_at") and checkout["expires_at"] <= timezone.now():
+            now = timezone.now()
+            self.subscription_checkouts.update_one(
+                {"_id": int(checkout_id), "status": "pending"},
+                {"$set": {"status": "expired", "updated_at": now}},
+            )
+            checkout = self.subscription_checkouts.find_one({"_id": int(checkout_id), "user_id": int(user_id)}) or checkout
+        plan = self.get_subscription_plan_by_id(checkout["subscription_plan_id"], active_only=False)
+        return checkout, plan
+
+    def cancel_subscription_checkout(self, *, user_id: int, checkout_id: int) -> tuple[dict[str, Any], dict[str, Any]]:
+        checkout, plan = self.get_subscription_checkout(user_id=user_id, checkout_id=checkout_id)
+        if not checkout or not plan:
+            raise LookupError("Subscription checkout not found.")
+        if checkout.get("status") != "pending":
+            raise ValueError("Only pending checkouts can be canceled.")
+
+        now = timezone.now()
+        self.subscription_checkouts.update_one(
+            {"_id": int(checkout_id), "user_id": int(user_id), "status": "pending"},
+            {"$set": {"status": "canceled", "updated_at": now, "canceled_at": now}},
+        )
+        checkout = self.subscription_checkouts.find_one({"_id": int(checkout_id), "user_id": int(user_id)}) or checkout
+        return checkout, plan
+
+    def confirm_subscription_checkout(self, *, user_id: int, checkout_id: int) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+        checkout, plan = self.get_subscription_checkout(user_id=user_id, checkout_id=checkout_id)
+        if not checkout or not plan:
+            raise LookupError("Subscription checkout not found.")
+        if checkout.get("status") == "paid":
+            subscription = self.get_subscription_by_id(
+                user_id=user_id,
+                subscription_id=int(checkout.get("subscription_id") or 0),
+            )
+            if not subscription:
+                raise LookupError("Subscription checkout has no active subscription.")
+            return checkout, subscription, plan
+        if checkout.get("status") != "pending":
+            raise ValueError("Checkout is not payable.")
+        if checkout.get("expires_at") and checkout["expires_at"] <= timezone.now():
+            self.subscription_checkouts.update_one(
+                {"_id": int(checkout_id)},
+                {"$set": {"status": "expired", "updated_at": timezone.now()}},
+            )
+            raise ValueError("Checkout has expired.")
+
+        subscription, plan = self.subscribe_user(user_id=user_id, plan_id=int(plan["_id"]))
+        now = timezone.now()
+        self.subscription_checkouts.update_one(
+            {"_id": int(checkout_id)},
+            {
+                "$set": {
+                    "status": "paid",
+                    "subscription_id": int(subscription["_id"]),
+                    "confirmed_at": now,
+                    "updated_at": now,
+                }
+            },
+        )
+        checkout = self.subscription_checkouts.find_one({"_id": int(checkout_id)}) or checkout
+        return checkout, subscription, plan
+
+    def subscribe_user(self, *, user_id: int, plan_id: int) -> tuple[dict[str, Any], dict[str, Any]]:
+        plan = self.get_subscription_plan_by_id(plan_id)
+        if not plan:
+            raise LookupError("Subscription plan not found.")
+
+        now = timezone.now()
+        interval_days = int(plan.get("interval_days", 30) or 30)
+        self.user_subscriptions.update_many(
+            {"user_id": int(user_id), "status": "active"},
+            {"$set": {"status": "canceled", "canceled_at": now, "updated_at": now}},
+        )
+        subscription_id = next_id("user_subscriptions")
+        while self.user_subscriptions.find_one({"_id": subscription_id}, {"_id": 1}):
+            subscription_id = next_id("user_subscriptions")
+
+        subscription = {
+            "_id": subscription_id,
+            "user_id": int(user_id),
+            "subscription_plan_id": int(plan["_id"]),
+            "status": "active",
+            "starts_at": now,
+            "renews_at": now + timedelta(days=interval_days),
+            "ends_at": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        self.user_subscriptions.insert_one(subscription)
+        return subscription, plan
+
     def get_documentations_by_api_ids(self, api_ids: list[int], *, active_only: bool = True) -> dict[int, list[dict[str, Any]]]:
         if not api_ids:
             return {}
@@ -557,6 +707,24 @@ class MongoRepository:
         if api_slug:
             query["api_slug"] = api_slug
         return list(self.documentations.find(query).sort([("order", ASCENDING), ("title", ASCENDING)]))
+
+    def get_endpoints_by_api_ids(self, api_ids: list[int], *, active_only: bool = True) -> dict[int, list[dict[str, Any]]]:
+        if not api_ids:
+            return {}
+        query: dict[str, Any] = {"api_id": {"$in": list({int(value) for value in api_ids})}}
+        if active_only:
+            query["is_active"] = True
+
+        endpoints_by_api: dict[int, list[dict[str, Any]]] = {}
+        for endpoint in self.api_endpoints.find(query).sort([("group", ASCENDING), ("order", ASCENDING), ("path", ASCENDING)]):
+            endpoints_by_api.setdefault(int(endpoint["api_id"]), []).append(endpoint)
+        return endpoints_by_api
+
+    def list_endpoints(self, *, api_slug: str | None = None) -> list[dict[str, Any]]:
+        query: dict[str, Any] = {"is_active": True}
+        if api_slug:
+            query["api_slug"] = api_slug
+        return list(self.api_endpoints.find(query).sort([("group", ASCENDING), ("order", ASCENDING), ("path", ASCENDING)]))
 
     def pricing_min_map(self, api_ids: list[int]) -> dict[int, str]:
         if not api_ids:
@@ -810,6 +978,33 @@ class MongoRepository:
             "updated_at": payload.get("updated_at", now),
         }
 
+    def build_subscription_plan_document(self, payload: dict[str, Any], *, current_id: int | None = None) -> dict[str, Any]:
+        now = timezone.now()
+        return {
+            "_id": current_id or next_id("subscription_plans"),
+            "name": payload.get("name", "").strip(),
+            "slug": payload.get("slug") or unique_slug(
+                self.subscription_plans,
+                payload.get("name", "") or "subscription-plan",
+                max_length=120,
+                current_id=current_id,
+            ),
+            "description": payload.get("description", "").strip(),
+            "plan_type": payload.get("plan_type", "starter"),
+            "price": float(payload.get("price", 0) or 0),
+            "currency": payload.get("currency", "IRR"),
+            "interval": payload.get("interval", "month"),
+            "interval_days": int(payload.get("interval_days", 30) or 30),
+            "api_publish_limit": payload.get("api_publish_limit"),
+            "included_requests": payload.get("included_requests"),
+            "features": [str(item).strip() for item in payload.get("features") or [] if str(item).strip()],
+            "is_popular": bool(payload.get("is_popular", False)),
+            "is_active": bool(payload.get("is_active", True)),
+            "sort_order": int(payload.get("sort_order", 100)),
+            "created_at": payload.get("created_at", now),
+            "updated_at": payload.get("updated_at", now),
+        }
+
     def build_documentation_document(
         self,
         payload: dict[str, Any],
@@ -835,6 +1030,37 @@ class MongoRepository:
             current_id=current_id,
         )
         return document
+
+    def build_endpoint_document(
+        self,
+        payload: dict[str, Any],
+        *,
+        current_id: int | None = None,
+    ) -> dict[str, Any]:
+        now = timezone.now()
+        method = str(payload.get("method", "GET")).upper()
+        path = str(payload.get("path", "/")).strip() or "/"
+        if not path.startswith("/"):
+            path = f"/{path}"
+        return {
+            "_id": current_id or next_id("api_endpoints"),
+            "api_id": payload.get("api_id"),
+            "api_slug": payload.get("api_slug", ""),
+            "method": method,
+            "path": path,
+            "name": payload.get("name", "").strip() or f"{method} {path}",
+            "summary": payload.get("summary", "").strip(),
+            "group": payload.get("group", "General").strip() or "General",
+            "request_schema": payload.get("request_schema") or {},
+            "response_schema": payload.get("response_schema") or {},
+            "sample_request": payload.get("sample_request") or {},
+            "sample_response": payload.get("sample_response") or {"ok": True},
+            "requires_auth": bool(payload.get("requires_auth", True)),
+            "is_active": bool(payload.get("is_active", True)),
+            "order": int(payload.get("order", 0)),
+            "created_at": payload.get("created_at", now),
+            "updated_at": payload.get("updated_at", now),
+        }
 
     def build_access_grant_document(self, payload: dict[str, Any], *, current_id: int | None = None) -> dict[str, Any]:
         now = timezone.now()

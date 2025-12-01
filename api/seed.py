@@ -54,6 +54,8 @@ def seed_sample_data(*, force: bool = False) -> dict[str, int | bool]:
 
     has_seed_records = bool(repository.get_user_by_username("demo-dev")) and bool(
         repository.apis.find_one({"slug": "speech-gateway"})
+    ) and bool(
+        repository.api_endpoints.find_one({"api_slug": "speech-gateway"})
     )
 
     if not force and has_seed_records:
@@ -63,7 +65,9 @@ def seed_sample_data(*, force: bool = False) -> dict[str, int | bool]:
             "categories": repository.categories.count_documents({}),
             "apis": repository.apis.count_documents({}),
             "plans": repository.pricing_plans.count_documents({}),
+            "subscription_plans": repository.subscription_plans.count_documents({}),
             "documentations": repository.documentations.count_documents({}),
+            "endpoints": repository.api_endpoints.count_documents({}),
             "access_grants": repository.access_grants.count_documents({}),
             "usage_items": repository.api_usage.count_documents({}),
         }
@@ -242,6 +246,95 @@ def seed_sample_data(*, force: bool = False) -> dict[str, int | bool]:
         ),
     )
 
+    starter_subscription, _ = _ensure_document(
+        repository.subscription_plans,
+        {"slug": "starter"},
+        repository.build_subscription_plan_document(
+            {
+                "slug": "starter",
+                "name": "Starter",
+                "description": "برای تیم‌های کوچک که می‌خواهند API منتشر کنند و مصرف پایه را رصد کنند.",
+                "plan_type": "starter",
+                "price": 0,
+                "currency": "IRR",
+                "interval": "month",
+                "interval_days": 30,
+                "api_publish_limit": 3,
+                "included_requests": 25000,
+                "features": ["انتشار ۳ API", "داشبورد مصرف", "پروفایل توسعه‌دهنده"],
+                "is_popular": False,
+                "is_active": True,
+                "sort_order": 1,
+                "created_at": now,
+                "updated_at": now,
+            }
+        ),
+    )
+    _ensure_document(
+        repository.subscription_plans,
+        {"slug": "growth"},
+        repository.build_subscription_plan_document(
+            {
+                "slug": "growth",
+                "name": "Growth",
+                "description": "برای تیم‌هایی که چند سرویس فعال، گزارش مصرف و اولویت انتشار می‌خواهند.",
+                "plan_type": "growth",
+                "price": 1490000,
+                "currency": "IRR",
+                "interval": "month",
+                "interval_days": 30,
+                "api_publish_limit": 15,
+                "included_requests": 250000,
+                "features": ["انتشار ۱۵ API", "گزارش مصرف پیشرفته", "اولویت بررسی API", "پشتیبانی ایمیلی"],
+                "is_popular": True,
+                "is_active": True,
+                "sort_order": 2,
+                "created_at": now,
+                "updated_at": now,
+            }
+        ),
+    )
+    _ensure_document(
+        repository.subscription_plans,
+        {"slug": "scale"},
+        repository.build_subscription_plan_document(
+            {
+                "slug": "scale",
+                "name": "Scale",
+                "description": "برای سازمان‌هایی که انتشار نامحدود، SLA و کنترل عملیاتی نیاز دارند.",
+                "plan_type": "scale",
+                "price": 4990000,
+                "currency": "IRR",
+                "interval": "month",
+                "interval_days": 30,
+                "api_publish_limit": None,
+                "included_requests": 1000000,
+                "features": ["انتشار نامحدود", "SLA اختصاصی", "گزارش سازمانی", "پشتیبانی اولویت‌دار"],
+                "is_popular": False,
+                "is_active": True,
+                "sort_order": 3,
+                "created_at": now,
+                "updated_at": now,
+            }
+        ),
+    )
+
+    _ensure_document(
+        repository.user_subscriptions,
+        {"user_id": int(demo_user["_id"]), "status": "active"},
+        {
+            "_id": 1,
+            "user_id": int(demo_user["_id"]),
+            "subscription_plan_id": int(starter_subscription["_id"]),
+            "status": "active",
+            "starts_at": now,
+            "renews_at": now,
+            "ends_at": None,
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+
     speech_plan, _ = _ensure_document(
         repository.pricing_plans,
         {"api_slug": speech_api["slug"], "rapidapi_plan_slug": "pro"},
@@ -367,6 +460,101 @@ def seed_sample_data(*, force: bool = False) -> dict[str, int | bool]:
         ),
     )
 
+    endpoint_specs = [
+        (
+            speech_api,
+            [
+                {
+                    "method": "POST",
+                    "path": "/speech/transcriptions",
+                    "name": "Create transcription",
+                    "summary": "Upload or reference Persian audio and receive text, segments, and confidence scores.",
+                    "group": "Speech",
+                    "sample_request": {"audio_url": "https://cdn.example.com/audio/sample-fa.wav", "language": "fa-IR", "diarization": True},
+                    "sample_response": {"text": "سلام دنیا", "language": "fa-IR", "confidence": 0.98},
+                    "order": 1,
+                },
+                {
+                    "method": "POST",
+                    "path": "/speech/synthesis",
+                    "name": "Create speech",
+                    "summary": "Turn Persian text into a hosted audio asset.",
+                    "group": "Speech",
+                    "sample_request": {"text": "سلام دنیا", "voice": "fa_female_1", "format": "mp3"},
+                    "sample_response": {"audio_url": "https://cdn.example.com/audio/out.mp3", "duration_seconds": 2.4},
+                    "order": 2,
+                },
+            ],
+        ),
+        (
+            payments_api,
+            [
+                {
+                    "method": "POST",
+                    "path": "/payments/verify",
+                    "name": "Verify payment",
+                    "summary": "Validate gateway transaction reference and normalized amount.",
+                    "group": "Payments",
+                    "sample_request": {"transaction_id": "txn_123456789", "amount": 250000, "currency": "IRR"},
+                    "sample_response": {"verified": True, "status": "settled", "trace_id": "pay_987"},
+                    "order": 1,
+                },
+                {
+                    "method": "GET",
+                    "path": "/payments/{transaction_id}",
+                    "name": "Get payment",
+                    "summary": "Fetch transaction state, payer metadata, and settlement status.",
+                    "group": "Payments",
+                    "sample_request": {},
+                    "sample_response": {"transaction_id": "txn_123456789", "status": "settled", "amount": 250000},
+                    "order": 2,
+                },
+            ],
+        ),
+        (
+            geo_api,
+            [
+                {
+                    "method": "POST",
+                    "path": "/routes/optimize",
+                    "name": "Optimize route",
+                    "summary": "Build fastest route between points with traffic-aware ETA.",
+                    "group": "Routing",
+                    "sample_request": {"origin": {"lat": 35.7219, "lng": 51.3347}, "destination": {"lat": 35.6892, "lng": 51.389}, "mode": "driving"},
+                    "sample_response": {"distance_meters": 12840, "duration_seconds": 1840, "polyline": "encoded_route"},
+                    "order": 1,
+                },
+                {
+                    "method": "GET",
+                    "path": "/geocode",
+                    "name": "Geocode address",
+                    "summary": "Resolve Persian address text to coordinates and confidence.",
+                    "group": "Geocoding",
+                    "sample_request": {"address": "تهران، میدان ونک"},
+                    "sample_response": {"lat": 35.7575, "lng": 51.4091, "confidence": 0.91},
+                    "order": 2,
+                },
+            ],
+        ),
+    ]
+    for api_doc, endpoints in endpoint_specs:
+        for endpoint in endpoints:
+            _ensure_document(
+                repository.api_endpoints,
+                {"api_slug": api_doc["slug"], "method": endpoint["method"], "path": endpoint["path"]},
+                repository.build_endpoint_document(
+                    {
+                        **endpoint,
+                        "api_id": int(api_doc["_id"]),
+                        "api_slug": api_doc["slug"],
+                        "requires_auth": True,
+                        "is_active": True,
+                        "created_at": now,
+                        "updated_at": now,
+                    }
+                ),
+            )
+
     repository.rate_api(user_id=int(demo_user["_id"]), api_id=int(speech_api["_id"]), value=5)
     repository.rate_api(user_id=int(reviewer_user["_id"]), api_id=int(speech_api["_id"]), value=4)
     repository.rate_api(user_id=int(reviewer_user["_id"]), api_id=int(geo_api["_id"]), value=4)
@@ -458,7 +646,9 @@ def seed_sample_data(*, force: bool = False) -> dict[str, int | bool]:
         "categories": repository.categories.count_documents({}),
         "apis": repository.apis.count_documents({}),
         "plans": repository.pricing_plans.count_documents({}),
+        "subscription_plans": repository.subscription_plans.count_documents({}),
         "documentations": repository.documentations.count_documents({}),
+        "endpoints": repository.api_endpoints.count_documents({}),
         "access_grants": repository.access_grants.count_documents({}),
         "usage_items": repository.api_usage.count_documents({}),
     }

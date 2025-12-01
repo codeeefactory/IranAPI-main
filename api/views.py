@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.shortcuts import redirect
+from django.utils.text import slugify
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -16,19 +17,25 @@ from .pagination import StandardResultsSetPagination
 from .repositories import MongoRepository
 from .schema import build_openapi_schema
 from .serializers import (
+    APIReleaseSerializer,
     LoginSerializer,
     RatingSerializer,
     RegistrationSerializer,
+    SubscriptionCheckoutSerializer,
     UserProfileUpdateSerializer,
     UserUpdateSerializer,
     build_session_payload,
     serialize_access_grant,
     serialize_api_detail,
+    serialize_api_endpoint,
     serialize_api_list,
     serialize_category,
     serialize_documentation,
     serialize_pricing_plan,
     serialize_profile,
+    serialize_subscription_checkout,
+    serialize_subscription_plan,
+    serialize_user_subscription,
     serialize_usage_item,
     serialize_user,
 )
@@ -161,6 +168,10 @@ class APIListView(APIView):
 
     def get(self, request):
         repository = get_repository()
+        owned_only = parse_bool(request.query_params.get("owned")) is True
+        if owned_only and (not request.user or not getattr(request.user, "is_authenticated", False)):
+            self.permission_denied(request)
+
         include_inactive = bool(
             request.user
             and getattr(request.user, "is_authenticated", False)
@@ -175,8 +186,101 @@ class APIListView(APIView):
             search=request.query_params.get("search"),
             ordering=request.query_params.get("ordering"),
             include_inactive=include_inactive,
+            created_by_user_id=int(request.user.id) if owned_only else None,
         )
         return Response(paginate(request, enrich_api_list(api_docs, repository)))
+
+    def post(self, request):
+        if not request.user or not getattr(request.user, "is_authenticated", False):
+            self.permission_denied(request)
+
+        repository = get_repository()
+        serializer = APIReleaseSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        now = timezone.now()
+        category_label = data.get("category") or "Community"
+        category_slug = slugify(category_label, allow_unicode=True).strip("-") or "community"
+        category = repository.categories.find_one(
+            {
+                "$or": [
+                    {"slug": category_slug},
+                    {"name": category_label},
+                    {"name_en": category_label},
+                ]
+            }
+        )
+        if not category:
+            category = repository.build_category_document(
+                {
+                    "slug": category_slug,
+                    "name": category_label,
+                    "name_en": category_label,
+                    "description": f"{category_label} APIs",
+                    "created_at": now,
+                    "updated_at": now,
+                }
+            )
+            repository.categories.insert_one(category)
+
+        api_doc = repository.build_api_document(
+            {
+                "name": data["name"],
+                "name_en": data["name"],
+                "description": data["description"],
+                "short_description": data["description"][:180],
+                "category_id": int(category["_id"]),
+                "base_url": data["base_url"],
+                "documentation_url": data.get("documentation_url", ""),
+                "logo": "",
+                "status": "active",
+                "is_featured": False,
+                "is_popular": False,
+                "tags": data.get("tags", []),
+                "canonical_version": "v1",
+                "public_auth_scheme": data["auth_scheme"],
+                "publication_status": "published",
+                "created_by_user_id": int(request.user.id),
+                "created_by_username": request.user.username,
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+        repository.apis.insert_one(api_doc)
+
+        if data.get("documentation_url") or data.get("description"):
+            repository.documentations.insert_one(
+                repository.build_documentation_document(
+                    {
+                        "api_id": int(api_doc["_id"]),
+                        "api_slug": api_doc["slug"],
+                        "title": "Overview",
+                        "content": data.get("description", ""),
+                        "order": 1,
+                        "is_active": True,
+                        "created_at": now,
+                        "updated_at": now,
+                    }
+                )
+            )
+
+        return Response(
+            {
+                "message": "API released and published to Explore.",
+                "api": serialize_api_detail(
+                    api_doc,
+                    category=category,
+                    pricing_plans=[],
+                    documentations=repository.get_documentations_by_api_ids([int(api_doc["_id"])]).get(
+                        int(api_doc["_id"]),
+                        [],
+                    ),
+                    endpoints=[],
+                ),
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class APIDetailView(APIView):
@@ -197,12 +301,14 @@ class APIDetailView(APIView):
             category = repository.get_categories_by_ids([int(api_doc["category_id"])]).get(int(api_doc["category_id"]))
         pricing_plans = repository.get_pricing_plans_by_api_ids([int(api_doc["_id"])]).get(int(api_doc["_id"]), [])
         documentations = repository.get_documentations_by_api_ids([int(api_doc["_id"])]).get(int(api_doc["_id"]), [])
+        endpoints = repository.get_endpoints_by_api_ids([int(api_doc["_id"])]).get(int(api_doc["_id"]), [])
         return Response(
             serialize_api_detail(
                 api_doc,
                 category=category,
                 pricing_plans=pricing_plans,
                 documentations=documentations,
+                endpoints=endpoints,
             )
         )
 
@@ -254,6 +360,101 @@ class PricingPlanListView(APIView):
         return Response(paginate(request, [serialize_pricing_plan(plan) for plan in plans]))
 
 
+class SubscriptionPlanListView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        repository = get_repository()
+        plans = repository.list_subscription_plans()
+        return Response(paginate(request, [serialize_subscription_plan(plan) for plan in plans]))
+
+
+class CurrentSubscriptionView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        repository = get_repository()
+        subscription = repository.get_current_subscription(request.user.id)
+        plan = (
+            repository.get_subscription_plan_by_id(subscription["subscription_plan_id"], active_only=False)
+            if subscription
+            else None
+        )
+        return Response({"subscription": serialize_user_subscription(subscription, plan)})
+
+    def post(self, request):
+        repository = get_repository()
+        serializer = SubscriptionCheckoutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            checkout, plan = repository.create_subscription_checkout(
+                user_id=request.user.id,
+                plan_id=serializer.validated_data["plan_id"],
+            )
+        except LookupError as exc:
+            raise NotFound("Subscription plan was not found.") from exc
+        return Response(
+            {
+                "message": "Checkout created successfully.",
+                "checkout": serialize_subscription_checkout(checkout, plan),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class SubscriptionCheckoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, checkout_id: int):
+        repository = get_repository()
+        checkout, plan = repository.get_subscription_checkout(user_id=request.user.id, checkout_id=checkout_id)
+        if not checkout or not plan:
+            raise NotFound("Subscription checkout was not found.")
+        return Response({"checkout": serialize_subscription_checkout(checkout, plan)})
+
+    def delete(self, request, checkout_id: int):
+        repository = get_repository()
+        try:
+            checkout, plan = repository.cancel_subscription_checkout(
+                user_id=request.user.id,
+                checkout_id=checkout_id,
+            )
+        except LookupError as exc:
+            raise NotFound("Subscription checkout was not found.") from exc
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+        return Response(
+            {
+                "message": "Checkout canceled successfully.",
+                "checkout": serialize_subscription_checkout(checkout, plan),
+            }
+        )
+
+
+class SubscriptionCheckoutConfirmView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, checkout_id: int):
+        repository = get_repository()
+        try:
+            checkout, subscription, plan = repository.confirm_subscription_checkout(
+                user_id=request.user.id,
+                checkout_id=checkout_id,
+            )
+        except LookupError as exc:
+            raise NotFound("Subscription checkout was not found.") from exc
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+
+        return Response(
+            {
+                "message": "Subscription activated successfully.",
+                "checkout": serialize_subscription_checkout(checkout, plan),
+                "subscription": serialize_user_subscription(subscription, plan),
+            }
+        )
+
+
 class APIPlanListView(APIView):
     permission_classes = [AllowAny]
 
@@ -279,6 +480,17 @@ class APIDocumentationListView(APIView):
         repository = get_repository()
         documentations = repository.list_documentations(api_slug=slug)
         return Response(paginate(request, [serialize_documentation(document) for document in documentations]))
+
+
+class APIEndpointListView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, slug: str):
+        repository = get_repository()
+        if not repository.get_api_by_slug(slug):
+            raise NotFound("API not found.")
+        endpoints = repository.list_endpoints(api_slug=slug)
+        return Response(paginate(request, [serialize_api_endpoint(endpoint) for endpoint in endpoints]))
 
 
 class RegisterView(APIView):

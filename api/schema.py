@@ -119,6 +119,12 @@ def build_openapi_schema() -> dict:
                     ],
                     "responses": {"200": _paginated("API summaries.", {"id": 1, "name": "Speech API", "slug": "speech-api", "status": "active", "rapidapi": {"public_auth_scheme": "api_key"}})},
                 },
+                "post": {
+                    "tags": ["Catalog"],
+                    "summary": "Release a new API to Explore",
+                    "security": [{"sessionCookie": []}, {"legacyToken": []}],
+                    "responses": {"201": {"description": "API created as active and published."}, "400": _error_response("Validation failed.")},
+                },
             },
             "/api/v1/catalog/apis/{slug}/": {
                 "get": {"tags": ["Catalog"], "summary": "Get API details", "responses": {"404": _error_response("API not found.")}},
@@ -143,8 +149,23 @@ def build_openapi_schema() -> dict:
                     "responses": {"200": _paginated("Documentation for the selected API.", {"id": 1, "title": "Quick start", "api_slug": "speech-api"})},
                 },
             },
+            "/api/v1/catalog/apis/{slug}/endpoints/": {
+                "get": {
+                    "tags": ["Catalog"],
+                    "summary": "List callable endpoints for one API",
+                    "responses": {
+                        "200": _paginated(
+                            "Endpoint reference for the selected API.",
+                            {"id": 1, "method": "POST", "path": "/speech/transcriptions", "group": "Speech"},
+                        )
+                    },
+                },
+            },
             "/api/v1/catalog/pricing-plans/": {
                 "get": {"tags": ["Catalog"], "summary": "List active pricing plans"},
+            },
+            "/api/v1/catalog/subscription-plans/": {
+                "get": {"tags": ["Catalog"], "summary": "List active user subscription plans"},
             },
             "/api/v1/catalog/documentations/": {
                 "get": {"tags": ["Catalog"], "summary": "List active documentation pages"},
@@ -159,6 +180,17 @@ def build_openapi_schema() -> dict:
             },
             "/api/v1/account/access/": {
                 "get": {"tags": ["Account"], "summary": "List access grants", "security": [{"sessionCookie": []}, {"legacyToken": []}]},
+            },
+            "/api/v1/account/subscription/": {
+                "get": {"tags": ["Account"], "summary": "Fetch current user subscription", "security": [{"sessionCookie": []}, {"legacyToken": []}]},
+                "post": {"tags": ["Account"], "summary": "Create a subscription checkout", "security": [{"sessionCookie": []}, {"legacyToken": []}]},
+            },
+            "/api/v1/account/subscription/checkout/{checkout_id}/": {
+                "get": {"tags": ["Account"], "summary": "Fetch a subscription checkout", "security": [{"sessionCookie": []}, {"legacyToken": []}]},
+                "delete": {"tags": ["Account"], "summary": "Cancel a pending subscription checkout", "security": [{"sessionCookie": []}, {"legacyToken": []}]},
+            },
+            "/api/v1/account/subscription/checkout/{checkout_id}/confirm/": {
+                "post": {"tags": ["Account"], "summary": "Confirm checkout and activate subscription", "security": [{"sessionCookie": []}, {"legacyToken": []}]},
             },
             "/api/v1/account/usage/": {
                 "get": {"tags": ["Account"], "summary": "List usage summaries", "security": [{"sessionCookie": []}, {"legacyToken": []}]},

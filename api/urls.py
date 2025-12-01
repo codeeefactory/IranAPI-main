@@ -3,6 +3,7 @@ from django.urls import include, path
 from .views import (
     APIDetailView,
     APIDocumentationListView,
+    APIEndpointListView,
     APIListView,
     APIPlanListView,
     APIRatingView,
@@ -27,6 +28,10 @@ from .views import (
     SessionView,
     SocialAuthProviderListView,
     SocialAuthStartView,
+    SubscriptionCheckoutView,
+    CurrentSubscriptionView,
+    SubscriptionCheckoutConfirmView,
+    SubscriptionPlanListView,
     UsageListView,
     UsageStatsView,
 )
@@ -44,6 +49,9 @@ v1_urlpatterns = [
     path("account/user/", CurrentUserView.as_view(), name="v1-account-user"),
     path("account/profile/", ProfileView.as_view(), name="v1-profile"),
     path("account/access/", AccessGrantListView.as_view(), name="v1-access"),
+    path("account/subscription/", CurrentSubscriptionView.as_view(), name="v1-account-subscription"),
+    path("account/subscription/checkout/<int:checkout_id>/", SubscriptionCheckoutView.as_view(), name="v1-account-subscription-checkout"),
+    path("account/subscription/checkout/<int:checkout_id>/confirm/", SubscriptionCheckoutConfirmView.as_view(), name="v1-account-subscription-checkout-confirm"),
     path("account/legacy-api-key/", GenerateApiKeyView.as_view(), name="v1-legacy-api-key"),
     path("account/usage/", UsageListView.as_view(), name="v1-usage-list"),
     path("account/usage/stats/", UsageStatsView.as_view(), name="v1-usage-stats"),
@@ -56,7 +64,9 @@ v1_urlpatterns = [
     path("catalog/apis/<slug:slug>/ratings/", APIRatingView.as_view(), name="v1-api-ratings"),
     path("catalog/apis/<slug:slug>/plans/", APIPlanListView.as_view(), name="v1-api-plans"),
     path("catalog/apis/<slug:slug>/docs/", APIDocumentationListView.as_view(), name="v1-api-docs"),
+    path("catalog/apis/<slug:slug>/endpoints/", APIEndpointListView.as_view(), name="v1-api-endpoints"),
     path("catalog/pricing-plans/", PricingPlanListView.as_view(), name="v1-pricing-plan-list"),
+    path("catalog/subscription-plans/", SubscriptionPlanListView.as_view(), name="v1-subscription-plan-list"),
     path("catalog/documentations/", DocumentationListView.as_view(), name="v1-documentation-list"),
 ]
 

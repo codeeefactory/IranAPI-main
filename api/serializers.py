@@ -73,6 +73,58 @@ def serialize_pricing_plan(plan: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def serialize_subscription_plan(plan: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": int(plan["_id"]),
+        "name": plan.get("name", ""),
+        "slug": plan.get("slug", ""),
+        "description": plan.get("description", ""),
+        "plan_type": plan.get("plan_type", "starter"),
+        "price": format_decimal(plan.get("price", 0)),
+        "currency": plan.get("currency", "IRR"),
+        "interval": plan.get("interval", "month"),
+        "interval_days": int(plan.get("interval_days", 30)),
+        "api_publish_limit": plan.get("api_publish_limit"),
+        "included_requests": plan.get("included_requests"),
+        "features": plan.get("features", []),
+        "is_popular": bool(plan.get("is_popular", False)),
+        "is_active": bool(plan.get("is_active", True)),
+        "created_at": plan.get("created_at"),
+        "updated_at": plan.get("updated_at"),
+    }
+
+
+def serialize_user_subscription(subscription: dict[str, Any] | None, plan: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not subscription or not plan:
+        return None
+    return {
+        "id": int(subscription["_id"]),
+        "status": subscription.get("status", "active"),
+        "plan": serialize_subscription_plan(plan),
+        "starts_at": subscription.get("starts_at"),
+        "renews_at": subscription.get("renews_at"),
+        "ends_at": subscription.get("ends_at"),
+        "created_at": subscription.get("created_at"),
+        "updated_at": subscription.get("updated_at"),
+    }
+
+
+def serialize_subscription_checkout(checkout: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": int(checkout["_id"]),
+        "status": checkout.get("status", "pending"),
+        "amount": format_decimal(checkout.get("amount", 0)),
+        "currency": checkout.get("currency", "IRR"),
+        "gateway": checkout.get("gateway", "manual"),
+        "reference": checkout.get("reference", ""),
+        "plan": serialize_subscription_plan(plan),
+        "created_at": checkout.get("created_at"),
+        "updated_at": checkout.get("updated_at"),
+        "expires_at": checkout.get("expires_at"),
+        "confirmed_at": checkout.get("confirmed_at"),
+    }
+
+
 def serialize_documentation(document: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": int(document["_id"]),
@@ -84,6 +136,26 @@ def serialize_documentation(document: dict[str, Any]) -> dict[str, Any]:
         "is_active": bool(document.get("is_active", True)),
         "created_at": document.get("created_at"),
         "updated_at": document.get("updated_at"),
+    }
+
+
+def serialize_api_endpoint(endpoint: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": int(endpoint["_id"]),
+        "api_slug": endpoint.get("api_slug", ""),
+        "method": endpoint.get("method", "GET"),
+        "path": endpoint.get("path", "/"),
+        "name": endpoint.get("name", ""),
+        "summary": endpoint.get("summary", ""),
+        "group": endpoint.get("group", "General"),
+        "request_schema": endpoint.get("request_schema", {}),
+        "response_schema": endpoint.get("response_schema", {}),
+        "sample_request": endpoint.get("sample_request", {}),
+        "sample_response": endpoint.get("sample_response", {}),
+        "requires_auth": bool(endpoint.get("requires_auth", True)),
+        "is_active": bool(endpoint.get("is_active", True)),
+        "created_at": endpoint.get("created_at"),
+        "updated_at": endpoint.get("updated_at"),
     }
 
 
@@ -121,6 +193,7 @@ def serialize_api_detail(
     category: dict[str, Any] | None,
     pricing_plans: list[dict[str, Any]],
     documentations: list[dict[str, Any]],
+    endpoints: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
         **serialize_api_list(
@@ -136,6 +209,7 @@ def serialize_api_detail(
         "banner": api_doc.get("banner", ""),
         "pricing_plans": [serialize_pricing_plan(plan) for plan in pricing_plans],
         "documentations": [serialize_documentation(document) for document in documentations],
+        "endpoints": [serialize_api_endpoint(endpoint) for endpoint in endpoints or []],
         "created_by_username": api_doc.get("created_by_username"),
     }
 
@@ -299,6 +373,37 @@ class LoginSerializer(serializers.Serializer):
 
 class RatingSerializer(serializers.Serializer):
     rating = serializers.IntegerField(min_value=1, max_value=5)
+
+
+class APIReleaseSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=160)
+    base_url = serializers.URLField()
+    documentation_url = serializers.URLField(required=False, allow_blank=True)
+    auth_scheme = serializers.ChoiceField(
+        choices=["api-key", "api_key", "bearer", "oauth2", "basic", "none"],
+        default="api-key",
+    )
+    category = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    tags = serializers.ListField(
+        child=serializers.CharField(max_length=40),
+        required=False,
+        allow_empty=True,
+    )
+    description = serializers.CharField()
+
+    def validate(self, attrs):
+        attrs["name"] = attrs["name"].strip()
+        attrs["documentation_url"] = attrs.get("documentation_url", "").strip()
+        attrs["category"] = attrs.get("category", "").strip()
+        attrs["description"] = attrs["description"].strip()
+        attrs["tags"] = [str(tag).strip() for tag in attrs.get("tags", []) if str(tag).strip()]
+        if attrs["auth_scheme"] == "api-key":
+            attrs["auth_scheme"] = "api_key"
+        return attrs
+
+
+class SubscriptionCheckoutSerializer(serializers.Serializer):
+    plan_id = serializers.IntegerField(min_value=1)
 
 
 class UserUpdateSerializer(serializers.Serializer):

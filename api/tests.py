@@ -1,4 +1,5 @@
 import importlib
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
@@ -187,6 +188,23 @@ class MongoApiTests(APISimpleTestCase):
         )
         self.repository.documentations.insert_one(self.documentation)
 
+        self.endpoint = self.repository.build_endpoint_document(
+            {
+                "api_id": int(self.api["_id"]),
+                "api_slug": self.api["slug"],
+                "method": "POST",
+                "path": "/speech/transcriptions",
+                "name": "Create transcription",
+                "summary": "Create a speech transcription.",
+                "group": "Speech",
+                "sample_request": {"audio_url": "https://example.com/audio.wav", "language": "fa-IR"},
+                "sample_response": {"text": "سلام دنیا", "confidence": 0.98},
+                "order": 1,
+                "is_active": True,
+            }
+        )
+        self.repository.api_endpoints.insert_one(self.endpoint)
+
         self.grant = self.repository.build_access_grant_document(
             {
                 "user_id": int(self.user["_id"]),
@@ -251,6 +269,33 @@ class MongoApiTests(APISimpleTestCase):
         self.assertIn("sessionid", response.cookies)
         self.assertIsNotNone(self.repository.get_user_by_username("sara"))
 
+    def test_register_rejects_duplicate_identity_and_password_mismatch(self):
+        duplicate = self.client.post(
+            "/api/v1/auth/register/",
+            {
+                "username": "ali",
+                "email": "fresh@example.com",
+                "password": "StrongPass123!",
+                "password_confirm": "StrongPass123!",
+            },
+            format="json",
+        )
+        mismatch = self.client.post(
+            "/api/v1/auth/register/",
+            {
+                "username": "fresh",
+                "email": "fresh@example.com",
+                "password": "StrongPass123!",
+                "password_confirm": "DifferentPass123!",
+            },
+            format="json",
+        )
+
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertEqual(duplicate.data["error"]["code"], "validation_error")
+        self.assertEqual(mismatch.status_code, 400)
+        self.assertEqual(mismatch.data["error"]["code"], "validation_error")
+
     def test_session_login_and_current_user(self):
         response = self.client.post(
             "/api/v1/auth/login/",
@@ -264,6 +309,34 @@ class MongoApiTests(APISimpleTestCase):
         current = self.client.get("/api/v1/account/user/")
         self.assertEqual(current.status_code, 200)
         self.assertEqual(current.data["username"], "ali")
+
+    def test_session_logout_clears_session_and_blocks_dashboard_routes(self):
+        login = self.client.post(
+            "/api/v1/auth/login/",
+            {"username": "ali", "password": "StrongPass123!"},
+            format="json",
+        )
+        self.assertEqual(login.status_code, 200)
+
+        logout = self.client.post("/api/v1/auth/logout/", format="json")
+        session = self.client.get("/api/v1/auth/session/")
+        private_route = self.client.get("/api/v1/account/usage/stats/")
+
+        self.assertEqual(logout.status_code, 200)
+        self.assertEqual(session.status_code, 200)
+        self.assertFalse(session.data["authenticated"])
+        self.assertIn(private_route.status_code, {401, 403})
+        self.assertEqual(private_route.data["error"]["code"], "not_authenticated")
+
+    def test_login_rejects_invalid_credentials(self):
+        response = self.client.post(
+            "/api/v1/auth/login/",
+            {"username": "ali", "password": "WrongPass123!"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
 
     def test_social_auth_providers_are_discoverable(self):
         response = self.client.get("/api/v1/auth/social/providers/")
@@ -298,6 +371,16 @@ class MongoApiTests(APISimpleTestCase):
         self.assertEqual(refreshed["views_count"], 1)
         self.assertEqual(len(response.data["pricing_plans"]), 1)
         self.assertEqual(len(response.data["documentations"]), 1)
+        self.assertEqual(len(response.data["endpoints"]), 1)
+        self.assertEqual(response.data["endpoints"][0]["path"], "/speech/transcriptions")
+
+    def test_api_endpoint_list(self):
+        response = self.client.get(f"/api/v1/catalog/apis/{self.api['slug']}/endpoints/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["method"], "POST")
+        self.assertEqual(response.data["results"][0]["sample_response"]["confidence"], 0.98)
 
     def test_rate_api_creates_then_updates_single_rating(self):
         self.authenticate_with_token(self.user)
@@ -347,6 +430,53 @@ class MongoApiTests(APISimpleTestCase):
         self.assertEqual(stats_response.data["active_apis"], 2)
         self.assertEqual(stats_response.data["top_apis"][0]["slug"], self.api["slug"])
 
+    def test_account_user_and_profile_patch_crud_operations(self):
+        self.authenticate_with_token(self.user)
+
+        user_response = self.client.patch(
+            "/api/v1/account/user/",
+            {
+                "email": "ali.updated@example.com",
+                "first_name": "Ali Updated",
+                "last_name": "Rezaei Updated",
+            },
+            format="json",
+        )
+        profile_response = self.client.patch(
+            "/api/v1/account/profile/",
+            {
+                "phone": "+989121234567",
+                "company": "IranAPI QA",
+                "bio": "Building and testing dashboard APIs.",
+                "avatar": "https://example.com/avatar.png",
+            },
+            format="json",
+        )
+
+        self.assertEqual(user_response.status_code, 200)
+        self.assertEqual(user_response.data["user"]["email"], "ali.updated@example.com")
+        self.assertEqual(user_response.data["user"]["first_name"], "Ali Updated")
+        self.assertEqual(profile_response.status_code, 200)
+        self.assertEqual(profile_response.data["profile"]["phone"], "+989121234567")
+        self.assertEqual(profile_response.data["profile"]["company"], "IranAPI QA")
+        self.assertEqual(profile_response.data["profile"]["avatar"], "https://example.com/avatar.png")
+
+        stored = self.repository.get_user_by_id(int(self.user["_id"]))
+        self.assertEqual(stored["email_normalized"], "ali.updated@example.com")
+        self.assertEqual(stored["profile"]["company"], "IranAPI QA")
+
+    def test_account_user_patch_rejects_duplicate_email(self):
+        self.authenticate_with_token(self.user)
+
+        response = self.client.patch(
+            "/api/v1/account/user/",
+            {"email": self.other_user["email"]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"]["code"], "validation_error")
+
     def test_access_grants_list(self):
         self.authenticate_with_token(self.user)
 
@@ -355,6 +485,167 @@ class MongoApiTests(APISimpleTestCase):
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["api"]["slug"], self.api["slug"])
         self.assertEqual(response.data["results"][0]["pricing_plan"]["rapidapi_plan_slug"], "pro")
+
+    def test_subscription_plans_and_checkout_flow(self):
+        plan = self.repository.build_subscription_plan_document(
+            {
+                "name": "Growth",
+                "slug": "growth",
+                "description": "Publish more APIs with dashboard usage limits.",
+                "plan_type": "growth",
+                "price": 1490000,
+                "currency": "IRR",
+                "interval": "month",
+                "interval_days": 30,
+                "api_publish_limit": 15,
+                "included_requests": 250000,
+                "features": ["Priority review"],
+                "is_popular": True,
+                "is_active": True,
+                "sort_order": 1,
+            }
+        )
+        self.repository.subscription_plans.insert_one(plan)
+        self.repository.user_subscriptions.insert_one(
+            {
+                "_id": 1,
+                "user_id": int(self.user["_id"]),
+                "subscription_plan_id": int(plan["_id"]),
+                "status": "active",
+                "starts_at": timezone.now(),
+                "renews_at": timezone.now(),
+                "ends_at": None,
+                "created_at": timezone.now(),
+                "updated_at": timezone.now(),
+            }
+        )
+        self.authenticate_with_token(self.user)
+
+        plans = self.client.get("/api/v1/catalog/subscription-plans/")
+        empty_current = self.client.get("/api/v1/account/subscription/")
+        checkout = self.client.post(
+            "/api/v1/account/subscription/",
+            {"plan_id": int(plan["_id"])},
+            format="json",
+        )
+        confirm = self.client.post(
+            f"/api/v1/account/subscription/checkout/{checkout.data['checkout']['id']}/confirm/",
+            format="json",
+        )
+        current = self.client.get("/api/v1/account/subscription/")
+
+        self.assertEqual(plans.status_code, 200)
+        self.assertEqual(plans.data["count"], 1)
+        self.assertEqual(plans.data["results"][0]["slug"], "growth")
+        self.assertEqual(empty_current.status_code, 200)
+        self.assertEqual(empty_current.data["subscription"]["plan"]["slug"], "growth")
+        self.assertEqual(checkout.status_code, 201)
+        self.assertEqual(checkout.data["checkout"]["status"], "pending")
+        self.assertEqual(checkout.data["checkout"]["plan"]["slug"], "growth")
+        self.assertEqual(confirm.status_code, 200)
+        self.assertEqual(confirm.data["checkout"]["status"], "paid")
+        self.assertEqual(confirm.data["subscription"]["plan"]["slug"], "growth")
+        self.assertNotEqual(confirm.data["subscription"]["id"], 1)
+        self.assertEqual(current.status_code, 200)
+        self.assertEqual(current.data["subscription"]["status"], "active")
+        self.assertEqual(current.data["subscription"]["plan"]["api_publish_limit"], 15)
+
+    def test_subscription_checkout_detail_cancel_and_idempotent_confirm(self):
+        plan = self.repository.build_subscription_plan_document(
+            {
+                "name": "Scale",
+                "slug": "scale",
+                "description": "Team subscription.",
+                "plan_type": "scale",
+                "price": 2490000,
+                "currency": "IRR",
+                "interval": "month",
+                "interval_days": 30,
+                "api_publish_limit": None,
+                "included_requests": 1000000,
+                "features": ["SLA"],
+                "is_active": True,
+            }
+        )
+        self.repository.subscription_plans.insert_one(plan)
+        self.authenticate_with_token(self.user)
+
+        checkout = self.client.post(
+            "/api/v1/account/subscription/",
+            {"plan_id": int(plan["_id"])},
+            format="json",
+        )
+        checkout_id = checkout.data["checkout"]["id"]
+        detail = self.client.get(f"/api/v1/account/subscription/checkout/{checkout_id}/")
+        confirm = self.client.post(f"/api/v1/account/subscription/checkout/{checkout_id}/confirm/", format="json")
+        confirm_again = self.client.post(f"/api/v1/account/subscription/checkout/{checkout_id}/confirm/", format="json")
+        cancel_paid = self.client.delete(f"/api/v1/account/subscription/checkout/{checkout_id}/")
+
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.data["checkout"]["status"], "pending")
+        self.assertEqual(confirm.status_code, 200)
+        self.assertEqual(confirm_again.status_code, 200)
+        self.assertEqual(confirm_again.data["subscription"]["id"], confirm.data["subscription"]["id"])
+        self.assertEqual(cancel_paid.status_code, 400)
+
+        second_checkout = self.client.post(
+            "/api/v1/account/subscription/",
+            {"plan_id": int(plan["_id"])},
+            format="json",
+        )
+        second_checkout_id = second_checkout.data["checkout"]["id"]
+        cancel_pending = self.client.delete(f"/api/v1/account/subscription/checkout/{second_checkout_id}/")
+
+        self.assertEqual(cancel_pending.status_code, 200)
+        self.assertEqual(cancel_pending.data["checkout"]["status"], "canceled")
+
+    def test_expired_subscription_checkout_cannot_be_confirmed(self):
+        plan = self.repository.build_subscription_plan_document(
+            {
+                "name": "Starter",
+                "slug": "starter",
+                "description": "Starter subscription.",
+                "plan_type": "starter",
+                "price": 990000,
+                "currency": "IRR",
+                "interval": "month",
+                "interval_days": 30,
+                "api_publish_limit": 3,
+                "included_requests": 25000,
+                "is_active": True,
+            }
+        )
+        self.repository.subscription_plans.insert_one(plan)
+        self.authenticate_with_token(self.user)
+
+        checkout = self.client.post(
+            "/api/v1/account/subscription/",
+            {"plan_id": int(plan["_id"])},
+            format="json",
+        )
+        checkout_id = checkout.data["checkout"]["id"]
+        self.repository.subscription_checkouts.update_one(
+            {"_id": checkout_id},
+            {"$set": {"expires_at": timezone.now() - timedelta(minutes=1)}},
+        )
+
+        detail = self.client.get(f"/api/v1/account/subscription/checkout/{checkout_id}/")
+        confirm = self.client.post(f"/api/v1/account/subscription/checkout/{checkout_id}/confirm/", format="json")
+
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.data["checkout"]["status"], "expired")
+        self.assertEqual(confirm.status_code, 400)
+        self.assertEqual(self.repository.user_subscriptions.count_documents({"user_id": int(self.user["_id"])}), 0)
+
+    def test_subscription_checkout_requires_authentication(self):
+        response = self.client.post(
+            "/api/v1/account/subscription/",
+            {"plan_id": 1},
+            format="json",
+        )
+
+        self.assertIn(response.status_code, {401, 403})
+        self.assertEqual(self.repository.user_subscriptions.count_documents({}), 0)
 
     def test_generate_api_key_disabled(self):
         self.authenticate_with_token(self.user)
@@ -380,6 +671,11 @@ class MongoApiTests(APISimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["info"]["title"], "IranAPI")
         self.assertIn("/api/v1/catalog/apis/", response.data["paths"])
+        self.assertIn("/api/v1/catalog/subscription-plans/", response.data["paths"])
+        self.assertIn(f"/api/v1/catalog/apis/{{slug}}/endpoints/", response.data["paths"])
+        self.assertIn("/api/v1/account/subscription/", response.data["paths"])
+        self.assertIn("/api/v1/account/subscription/checkout/{checkout_id}/", response.data["paths"])
+        self.assertIn("/api/v1/account/subscription/checkout/{checkout_id}/confirm/", response.data["paths"])
 
     def test_site_metadata_routes(self):
         robots = self.client.get("/robots.txt")
@@ -410,6 +706,47 @@ class MongoApiTests(APISimpleTestCase):
         self.assertIn(self.other_api["slug"], slugs)
         self.assertNotIn(self.hidden_api["slug"], slugs)
 
+    def test_authenticated_user_can_release_api_to_public_catalog(self):
+        self.authenticate_with_token(self.user)
+
+        release = self.client.post(
+            "/api/v1/catalog/apis/",
+            {
+                "name": "Weather Insights",
+                "base_url": "https://weather.example.dev/v1",
+                "documentation_url": "https://weather.example.dev/docs",
+                "auth_scheme": "api-key",
+                "category": "Weather",
+                "tags": ["weather", "forecast"],
+                "description": "Forecast and severe weather alerts for public dashboards.",
+            },
+            format="json",
+        )
+        search = self.client.get("/api/v1/catalog/apis/?search=Weather%20Insights")
+
+        self.assertEqual(release.status_code, 201)
+        self.assertEqual(release.data["api"]["status"], "active")
+        self.assertEqual(release.data["api"]["rapidapi"]["publication_status"], "published")
+        self.assertEqual(release.data["api"]["rapidapi"]["public_auth_scheme"], "api_key")
+        self.assertEqual(search.status_code, 200)
+        self.assertEqual(search.data["count"], 1)
+        self.assertEqual(search.data["results"][0]["slug"], release.data["api"]["slug"])
+        self.assertEqual(search.data["results"][0]["category"]["name"], "Weather")
+
+    def test_anonymous_user_cannot_release_api(self):
+        response = self.client.post(
+            "/api/v1/catalog/apis/",
+            {
+                "name": "Hidden Release",
+                "base_url": "https://hidden.example.dev/v1",
+                "description": "Should not be published without authentication.",
+            },
+            format="json",
+        )
+
+        self.assertIn(response.status_code, {401, 403})
+        self.assertEqual(self.repository.apis.count_documents({"name": "Hidden Release"}), 0)
+
     def test_sample_seed_is_idempotent_and_populates_dashboard_data(self):
         reset_database()
         seed_sample_data()
@@ -422,3 +759,6 @@ class MongoApiTests(APISimpleTestCase):
         self.assertIsNotNone(repository.get_user_by_username("demo-dev"))
         self.assertGreaterEqual(repository.access_grants.count_documents({}), 2)
         self.assertGreaterEqual(repository.api_usage.count_documents({}), 2)
+        self.assertGreaterEqual(repository.subscription_plans.count_documents({}), 3)
+        self.assertGreaterEqual(repository.api_endpoints.count_documents({}), 6)
+        self.assertIsNotNone(repository.get_current_subscription(int(repository.get_user_by_username("demo-dev")["_id"])))

@@ -160,11 +160,17 @@ def main() -> int:
     categories = crawler.request("GET", "/api/v1/catalog/categories/", schema_path="/api/v1/catalog/categories/")
     apis = crawler.request("GET", "/api/v1/catalog/apis/?ordering=-rating", schema_path="/api/v1/catalog/apis/")
     plans = crawler.request("GET", "/api/v1/catalog/pricing-plans/", schema_path="/api/v1/catalog/pricing-plans/")
+    subscription_plans = crawler.request(
+        "GET",
+        "/api/v1/catalog/subscription-plans/",
+        schema_path="/api/v1/catalog/subscription-plans/",
+    )
     docs = crawler.request("GET", "/api/v1/catalog/documentations/", schema_path="/api/v1/catalog/documentations/")
 
     expect(categories.body["count"] >= 3, "Expected seeded categories for crawler validation.")
     expect(apis.body["count"] >= 3, "Expected seeded APIs for crawler validation.")
     expect(plans.body["count"] >= 3, "Expected seeded pricing plans for crawler validation.")
+    expect(subscription_plans.body["count"] >= 3, "Expected seeded subscription plans for crawler validation.")
     expect(docs.body["count"] >= 3, "Expected seeded documentation pages for crawler validation.")
 
     first_api = apis.body["results"][0]
@@ -193,6 +199,12 @@ def main() -> int:
         f"/api/v1/catalog/apis/{first_api_slug}/docs/",
         schema_path="/api/v1/catalog/apis/{slug}/docs/",
     )
+    endpoints = crawler.request(
+        "GET",
+        f"/api/v1/catalog/apis/{first_api_slug}/endpoints/",
+        schema_path="/api/v1/catalog/apis/{slug}/endpoints/",
+    )
+    expect(endpoints.body["count"] >= 1, "Expected seeded endpoint reference records.")
     crawler.request(
         "GET",
         f"/api/v1/catalog/apis/?tag={urllib.parse.quote(first_tag)}",
@@ -257,14 +269,38 @@ def main() -> int:
     user = crawler.request("GET", "/api/v1/account/user/", schema_path="/api/v1/account/user/")
     profile = crawler.request("GET", "/api/v1/account/profile/", schema_path="/api/v1/account/profile/")
     access = crawler.request("GET", "/api/v1/account/access/", schema_path="/api/v1/account/access/")
+    current_subscription = crawler.request(
+        "GET",
+        "/api/v1/account/subscription/",
+        schema_path="/api/v1/account/subscription/",
+    )
     usage = crawler.request("GET", "/api/v1/account/usage/", schema_path="/api/v1/account/usage/")
     usage_stats = crawler.request("GET", "/api/v1/account/usage/stats/", schema_path="/api/v1/account/usage/stats/")
 
     expect(user.body["username"] == "demo-dev", f"Unexpected current user payload: {user.body}")
     expect(bool(profile.body["company"]), "Profile should include seeded company details.")
     expect(access.body["count"] >= 2, "Expected seeded access grants.")
+    expect(current_subscription.body["subscription"]["status"] == "active", "Expected active seeded subscription.")
     expect(usage.body["count"] >= 2, "Expected seeded usage items.")
     expect(usage_stats.body["total_requests"] > 0, "Usage stats should aggregate seeded requests.")
+
+    growth_plan = next((plan for plan in subscription_plans.body["results"] if plan["slug"] == "growth"), None)
+    expect(growth_plan is not None, "Expected Growth subscription plan.")
+    checkout = crawler.request(
+        "POST",
+        "/api/v1/account/subscription/",
+        schema_path="/api/v1/account/subscription/",
+        expected_status=201,
+        data={"plan_id": growth_plan["id"]},
+    )
+    expect(checkout.body["checkout"]["status"] == "pending", "Subscription checkout should start as pending.")
+    confirm = crawler.request(
+        "POST",
+        f"/api/v1/account/subscription/checkout/{checkout.body['checkout']['id']}/confirm/",
+        schema_path="/api/v1/account/subscription/checkout/{checkout_id}/confirm/",
+    )
+    expect(confirm.body["checkout"]["status"] == "paid", "Checkout confirmation should mark invoice paid.")
+    expect(confirm.body["subscription"]["plan"]["slug"] == "growth", "Checkout confirmation should activate Growth.")
 
     update_user = crawler.request(
         "PATCH",
@@ -314,14 +350,19 @@ def main() -> int:
         ("GET", "/api/v1/catalog/apis/{slug}/similar/"),
         ("GET", "/api/v1/catalog/apis/{slug}/plans/"),
         ("GET", "/api/v1/catalog/apis/{slug}/docs/"),
+        ("GET", "/api/v1/catalog/apis/{slug}/endpoints/"),
         ("POST", "/api/v1/catalog/apis/{slug}/ratings/"),
         ("GET", "/api/v1/catalog/pricing-plans/"),
+        ("GET", "/api/v1/catalog/subscription-plans/"),
         ("GET", "/api/v1/catalog/documentations/"),
         ("GET", "/api/v1/account/user/"),
         ("PATCH", "/api/v1/account/user/"),
         ("GET", "/api/v1/account/profile/"),
         ("PATCH", "/api/v1/account/profile/"),
         ("GET", "/api/v1/account/access/"),
+        ("GET", "/api/v1/account/subscription/"),
+        ("POST", "/api/v1/account/subscription/"),
+        ("POST", "/api/v1/account/subscription/checkout/{checkout_id}/confirm/"),
         ("GET", "/api/v1/account/usage/"),
         ("GET", "/api/v1/account/usage/stats/"),
         ("GET", "/api/v1/catalog/categories/{slug}/"),
