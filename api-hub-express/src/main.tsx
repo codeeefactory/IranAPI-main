@@ -19,7 +19,7 @@ try {
 
   const shell = document.createElement("div");
   shell.style.cssText =
-    "min-height:100vh;display:grid;place-items:center;padding:24px;background:#071014;color:#e7f8fb;font-family:Segoe UI,Tahoma,sans-serif;";
+    "min-height:100vh;display:grid;place-items:center;padding:24px;background:#071014;color:#e7f8fb;font-family:Vazirmatn,Sora,Segoe UI,Tahoma,sans-serif;";
 
   const panel = document.createElement("div");
   panel.style.cssText =
