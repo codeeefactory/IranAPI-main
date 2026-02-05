@@ -1,490 +1,298 @@
-import { ArrowRight, Check, Code2, Copy, PlusCircle, RadioTower, Save, ShieldCheck, Sparkles, UserRound } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  ArrowLeft,
+  BarChart3,
+  Blocks,
+  Check,
+  Copy,
+  KeyRound,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  UserRound,
+  Zap,
+} from "lucide-react";
+import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
-import { SecretPreview, SecurityNotice } from "@/components/ApiVaultBadges";
+import { ApiStatusBadge, AuthSchemeBadge, HealthSignalBadge, MethodBadge } from "@/components/ApiVaultBadges";
 import { Footer } from "@/components/Footer";
 import { Navigation } from "@/components/Navigation";
+import { RapidApiSyncPanel } from "@/components/RapidApiSyncPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { useAccessGrants, useCurrentUser, useProfile, useUpdateProfile, useUpdateUser, useUsage, useUsageStats } from "@/hooks/useApi";
-import { usePageMetadata } from "@/lib/metadata";
-import { formatDateTimeFa } from "@/lib/site";
-
-const apiDraftStorageKey = "iranapi-dashboard-api-drafts";
-
-const defaultApiForm = {
-  name: "",
-  baseUrl: "",
-  documentationUrl: "",
-  authScheme: "api-key",
-  category: "",
-  tags: "",
-  description: "",
-};
-
-interface ApiDraft {
-  id: string;
-  name: string;
-  baseUrl: string;
-  documentationUrl: string;
-  authScheme: string;
-  category: string;
-  tags: string[];
-  description: string;
-  owner: string;
-  createdAt: string;
-}
-
-const readStoredApiDrafts = (): ApiDraft[] => {
-  if (typeof window === "undefined") {
-    return [];
-  }
-
-  try {
-    const storedDrafts = window.localStorage.getItem(apiDraftStorageKey);
-    if (!storedDrafts) {
-      return [];
-    }
-
-    const parsed = JSON.parse(storedDrafts);
-    return Array.isArray(parsed) ? parsed.slice(0, 5) : [];
-  } catch {
-    return [];
-  }
-};
+import {
+  useAccessGrants,
+  useAPIs,
+  useCategories,
+  useCurrentSubscription,
+  useCurrentUser,
+  useGenerateLegacyAPIKey,
+  useProfile,
+  useUsageStats,
+} from "@/hooks/useApi";
+import { getBrowseBootstrap, getHomeBootstrap } from "@/lib/bootstrap";
+import { createBreadcrumbSchema, usePageMetadata } from "@/lib/metadata";
+import { formatCurrencyLabel, formatFaNumber, toSiteUrl } from "@/lib/site";
 
 export default function Dashboard() {
+  const homeBootstrap = getHomeBootstrap();
+  const browseBootstrap = getBrowseBootstrap();
   const { data: user } = useCurrentUser();
   const { data: profile } = useProfile();
   const { data: accessGrants } = useAccessGrants();
-  const { data: usage } = useUsage();
   const { data: usageStats } = useUsageStats();
-  const updateUser = useUpdateUser();
-  const updateProfile = useUpdateProfile();
+  const { data: currentSubscription } = useCurrentSubscription();
+  const { data: categories } = useCategories(undefined, {
+    initialData: homeBootstrap?.categories || browseBootstrap?.categories,
+  });
+  const { data: featuredApis } = useAPIs(
+    { featured: true, ordering: "-rating", page_size: 6 },
+    { initialData: homeBootstrap?.featuredApis || browseBootstrap?.recommendedApis },
+  );
+  const { data: apiDirectory } = useAPIs(
+    { ordering: "-rating", page_size: 12 },
+    { initialData: homeBootstrap?.apis || browseBootstrap?.apis },
+  );
+  const generateLegacyAPIKey = useGenerateLegacyAPIKey();
+  const [search, setSearch] = useState("");
+  const [submittedSearch, setSubmittedSearch] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const displayName = user?.first_name || user?.username || "IranAPI Workspace";
+  const planName = currentSubscription?.subscription?.plan.name || "بدون پلن فعال";
+  const activeGrant = accessGrants?.results.find((grant) => grant.status === "active");
+  const totalRequests = usageStats?.total_requests || 0;
+  const activeApis = usageStats?.active_apis || 0;
+  const apiCount = apiDirectory?.count || 0;
+  const categoryCount = categories?.count || 0;
+
+  const visibleApis = useMemo(() => {
+    const source = (featuredApis?.results.length ? featuredApis.results : apiDirectory?.results) || [];
+    const needle = submittedSearch.trim().toLowerCase();
+
+    if (!needle) {
+      return source.slice(0, 6);
+    }
+
+    return source
+      .filter((api) =>
+        [api.name, api.name_en, api.short_description, api.category?.name, api.category?.name_en, ...(api.tags || [])]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(needle)),
+      )
+      .slice(0, 6);
+  }, [apiDirectory?.results, featuredApis?.results, submittedSearch]);
+
+  const topCategories = useMemo(() => (categories?.results || []).slice(0, 4), [categories?.results]);
+
+  const integrationSnippet = [
+    "curl --request GET \\",
+    `  --url "${activeGrant?.api.base_url || "https://api.iranapi.com/v1"}/health" \\`,
+    `  --header "X-IranAPI-Key: ${profile?.api_key_preview || "<IRANAPI_API_KEY>"}"`,
+  ].join("\n");
 
   usePageMetadata({
     title: "داشبورد توسعه‌دهنده",
-    description: "حساب کاربری، دسترسی‌های فعال، داده‌های مصرف و مشخصات توسعه‌دهنده خود را در داشبورد IranAPI مدیریت کنید.",
+    description: "داشبورد IranAPI برای کشف APIها، مدیریت دسترسی، کلیدها، پلن و مصرف حساب توسعه‌دهنده.",
     path: "/dashboard",
     noindex: true,
+    structuredData: [
+      createBreadcrumbSchema([
+        { name: "خانه", path: "/" },
+        { name: "داشبورد", path: "/dashboard" },
+      ]),
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        name: "IranAPI Dashboard",
+        url: toSiteUrl("/dashboard"),
+        applicationCategory: "DeveloperApplication",
+      },
+    ],
   });
 
-  const [accountForm, setAccountForm] = useState({
-    first_name: "",
-    last_name: "",
-    email: "",
-  });
-  const [profileForm, setProfileForm] = useState({
-    phone: "",
-    company: "",
-    bio: "",
-    avatar: "",
-  });
-  const [apiForm, setApiForm] = useState(defaultApiForm);
-  const [apiDrafts, setApiDrafts] = useState<ApiDraft[]>(readStoredApiDrafts);
-  const [manifestCopied, setManifestCopied] = useState(false);
-
-  useEffect(() => {
-    if (user) {
-      setAccountForm({
-        first_name: user.first_name || "",
-        last_name: user.last_name || "",
-        email: user.email || "",
-      });
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (profile) {
-      setProfileForm({
-        phone: profile.phone || "",
-        company: profile.company || "",
-        bio: profile.bio || "",
-        avatar: profile.avatar || "",
-      });
-    }
-  }, [profile]);
-
-  const apiTags = useMemo(
-    () =>
-      apiForm.tags
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter(Boolean),
-    [apiForm.tags],
-  );
-
-  const apiManifest = useMemo(
-    () =>
-      JSON.stringify(
-        {
-          name: apiForm.name.trim() || "<API_NAME>",
-          base_url: apiForm.baseUrl.trim() || "https://api.example.com/v1",
-          documentation_url: apiForm.documentationUrl.trim() || "",
-          auth_scheme: apiForm.authScheme,
-          category: apiForm.category.trim() || "uncategorized",
-          tags: apiTags.length ? apiTags : ["developer-tool"],
-          owner: user?.username || user?.email || "current-user",
-          status: "draft",
-          secret_policy: "Never paste live API keys, tokens, or secrets into this draft.",
-        },
-        null,
-        2,
-      ),
-    [apiForm, apiTags, user?.email, user?.username],
-  );
-
-  const saveApiDrafts = (drafts: ApiDraft[]) => {
-    setApiDrafts(drafts);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(apiDraftStorageKey, JSON.stringify(drafts));
-    }
-  };
-
-  const handleAccountSubmit = async (event: FormEvent) => {
+  const handleSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await updateUser.mutateAsync(accountForm);
+    setSubmittedSearch(search);
   };
 
-  const handleProfileSubmit = async (event: FormEvent) => {
-    event.preventDefault();
-    await updateProfile.mutateAsync({
-      ...profileForm,
-      avatar: profileForm.avatar.trim() || null,
-    });
-  };
-
-  const handleApiDraftSubmit = (event: FormEvent) => {
-    event.preventDefault();
-
-    const nextDraft: ApiDraft = {
-      id: `${Date.now()}`,
-      name: apiForm.name.trim(),
-      baseUrl: apiForm.baseUrl.trim(),
-      documentationUrl: apiForm.documentationUrl.trim(),
-      authScheme: apiForm.authScheme,
-      category: apiForm.category.trim(),
-      tags: apiTags,
-      description: apiForm.description.trim(),
-      owner: user?.username || user?.email || "developer",
-      createdAt: new Date().toISOString(),
-    };
-
-    saveApiDrafts([nextDraft, ...apiDrafts].slice(0, 5));
-    setApiForm(defaultApiForm);
-    setManifestCopied(false);
-    toast.success("پیشنهاد API در داشبورد ذخیره شد.");
-  };
-
-  const handleCopyManifest = async () => {
+  const copyIntegration = async () => {
     try {
-      await navigator.clipboard.writeText(apiManifest);
-      setManifestCopied(true);
-      toast.success("Manifest API کپی شد.");
+      await navigator.clipboard.writeText(integrationSnippet);
+      setCopied(true);
+      toast.success("نمونه درخواست کپی شد.");
     } catch {
-      toast.error("کپی خودکار در این مرورگر فعال نیست.");
+      toast.error("دسترسی به Clipboard ممکن نیست.");
     }
   };
 
-  const activeAccess = accessGrants?.results.find((grant) => grant.status === "active");
-  const recommendedSlug = usageStats?.top_apis?.[0]?.slug || accessGrants?.results[0]?.api.slug;
-  const recommendedName = usageStats?.top_apis?.[0]?.name || accessGrants?.results[0]?.api.name;
+  const rotateKey = async () => {
+    const result = await generateLegacyAPIKey.mutateAsync();
+    if (result.api_key) {
+      await navigator.clipboard.writeText(result.api_key).catch(() => undefined);
+    }
+  };
 
   return (
     <div className="cyber-shell min-h-screen bg-background">
       <Navigation />
 
       <main id="main-content" className="container page-stack">
-        <section className="page-hero grid gap-6 lg:grid-cols-[1.1fr,0.9fr] lg:items-start">
-          <div className="space-y-5">
-            <div className="space-y-3">
-              <p className="eyebrow">Developer Portal</p>
-              <h1 className="section-title">داشبورد {user?.first_name || user?.username || "توسعه‌دهنده"}</h1>
+        <section className="page-hero grid gap-8 lg:grid-cols-[1.15fr,0.85fr] lg:items-start">
+          <div className="space-y-6">
+            <span className="cyber-kicker">داشبورد همگام با تجربه اصلی IranAPI</span>
+            <div className="space-y-4">
+              <h1 className="section-title cyber-title">کشف، اتصال و پایش APIها در همان جریان وب‌سایت</h1>
               <p className="section-copy">
-                این ناحیه برای مدیریت حساب، پروفایل، دسترسی‌های ثبت‌شده، کلیدهای امن و وضعیت مصرف ساخته شده است. فعال‌سازی دسترسی API از مسیر مستقل IranAPI انجام می‌شود.
+                همین داده‌هایی که در خانه و صفحه کشف می‌بینید، اینجا با وضعیت حساب، دسترسی‌ها، کلید API و مصرف شما ترکیب شده است.
               </p>
             </div>
 
+            <form className="glass-panel grid gap-3 p-4 sm:grid-cols-[1fr,150px]" onSubmit={handleSearch} role="search">
+              <div className="relative">
+                <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="جست‌وجوی API در داشبورد"
+                  className="pr-9"
+                />
+              </div>
+              <Button type="submit" className="gap-2">
+                نمایش
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </form>
+
             <div className="flex flex-wrap gap-3">
-              <span className="stat-chip">دسترسی فعال: {(accessGrants?.results.length || 0).toLocaleString("fa-IR")}</span>
-              <span className="stat-chip">درخواست ثبت‌شده: {(usageStats?.total_requests || 0).toLocaleString("fa-IR")}</span>
-              <span className="stat-chip">ایمیل: {user?.email || "ثبت نشده"}</span>
+              <span className="stat-chip">
+                <Sparkles className="h-4 w-4 text-primary" />
+                {formatFaNumber(apiCount)} API فعال
+              </span>
+              <span className="stat-chip">
+                <Blocks className="h-4 w-4 text-primary" />
+                {formatFaNumber(categoryCount)} دسته‌بندی
+              </span>
+              <span className="stat-chip">
+                <BarChart3 className="h-4 w-4 text-primary" />
+                {formatFaNumber(totalRequests)} درخواست حساب
+              </span>
             </div>
           </div>
 
           <Card className="surface-card">
-            <CardHeader>
-              <CardTitle>اقدام‌های سریع</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm leading-7 text-muted-foreground">
-              <div className="metric-card">
-                <p className="mb-2 font-semibold text-foreground">پیشنهاد بعدی</p>
-                <p>{recommendedName ? `بیشترین استفاده فعلی شما روی ${recommendedName} ثبت شده است.` : "اگر هنوز سرویس فعالی ندارید، از فهرست APIها شروع کنید و پلن مناسب را از مرکز قیمت‌گذاری IranAPI بررسی کنید."}</p>
+            <CardContent className="space-y-5 p-6">
+              <div className="flex items-center gap-3">
+                <div className="grid h-12 w-12 place-items-center rounded-md bg-gradient-primary text-primary-foreground">
+                  <UserRound className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate font-bold">{displayName}</p>
+                  <p className="truncate text-sm text-muted-foreground">{user?.email || "ایمیل ثبت نشده"}</p>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-3">
-                <Button asChild>
-                  <Link to="/browse" className="gap-2">
-                    مرور APIها
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </Button>
-                <Button variant="outline" asChild>
-                  <Link to="/pricing">بررسی قیمت‌گذاری</Link>
-                </Button>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="metric-card">
+                  <p className="text-sm text-muted-foreground">درخواست‌ها</p>
+                  <p className="text-2xl font-bold">{formatFaNumber(totalRequests)}</p>
+                </div>
+                <div className="metric-card">
+                  <p className="text-sm text-muted-foreground">APIهای فعال</p>
+                  <p className="text-2xl font-bold">{formatFaNumber(activeApis)}</p>
+                </div>
               </div>
-              {recommendedSlug ? (
-                <Button variant="outline" className="w-full" asChild>
-                  <Link to={`/api/${recommendedSlug}`}>مشاهده سرویس پیشنهادی</Link>
-                </Button>
-              ) : null}
-            </CardContent>
-          </Card>
-        </section>
 
-        <section className="grid gap-6 lg:grid-cols-4">
-          <Card className="surface-card border-border/60">
-            <CardContent className="space-y-2 p-6">
-              <p className="text-sm text-muted-foreground">کل درخواست‌ها</p>
-              <p className="text-3xl font-bold">{(usageStats?.total_requests || 0).toLocaleString("fa-IR")}</p>
-            </CardContent>
-          </Card>
-          <Card className="surface-card border-border/60">
-            <CardContent className="space-y-2 p-6">
-              <p className="text-sm text-muted-foreground">APIهای فعال</p>
-              <p className="text-3xl font-bold">{(usageStats?.active_apis || 0).toLocaleString("fa-IR")}</p>
-            </CardContent>
-          </Card>
-          <Card className="surface-card border-border/60">
-            <CardContent className="space-y-2 p-6">
-              <p className="text-sm text-muted-foreground">دسترسی‌های ثبت‌شده</p>
-              <p className="text-3xl font-bold">{(accessGrants?.results.length || 0).toLocaleString("fa-IR")}</p>
-            </CardContent>
-          </Card>
-          <Card className="surface-card border-border/60">
-            <CardContent className="space-y-2 p-6">
-              <p className="text-sm text-muted-foreground">ایمیل حساب</p>
-              <p className="truncate text-lg font-semibold">{user?.email || "ثبت نشده"}</p>
-            </CardContent>
-          </Card>
-        </section>
-
-        <section className="grid gap-8 lg:grid-cols-[1.05fr,0.95fr]">
-          <Card className="surface-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <PlusCircle className="h-5 w-5 text-primary" />
-                افزودن API به خزانه
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-4" onSubmit={handleApiDraftSubmit}>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="api-name">نام API</Label>
-                    <Input
-                      id="api-name"
-                      required
-                      value={apiForm.name}
-                      placeholder="Speech Gateway"
-                      onChange={(event) => setApiForm((current) => ({ ...current, name: event.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="api-base-url">Base URL</Label>
-                    <Input
-                      id="api-base-url"
-                      required
-                      dir="ltr"
-                      type="url"
-                      value={apiForm.baseUrl}
-                      placeholder="https://api.example.com/v1"
-                      onChange={(event) => setApiForm((current) => ({ ...current, baseUrl: event.target.value }))}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="api-docs">لینک مستندات</Label>
-                    <Input
-                      id="api-docs"
-                      dir="ltr"
-                      type="url"
-                      value={apiForm.documentationUrl}
-                      placeholder="https://docs.example.com"
-                      onChange={(event) => setApiForm((current) => ({ ...current, documentationUrl: event.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="api-auth">روش احراز هویت</Label>
-                    <select
-                      id="api-auth"
-                      className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground ring-offset-background transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                      value={apiForm.authScheme}
-                      onChange={(event) => setApiForm((current) => ({ ...current, authScheme: event.target.value }))}
-                    >
-                      <option value="api-key">API Key</option>
-                      <option value="bearer">Bearer Token</option>
-                      <option value="oauth2">OAuth 2.0</option>
-                      <option value="basic">Basic Auth</option>
-                      <option value="none">No Auth</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="api-category">دسته‌بندی</Label>
-                    <Input
-                      id="api-category"
-                      value={apiForm.category}
-                      placeholder="AI, Finance, Messaging"
-                      onChange={(event) => setApiForm((current) => ({ ...current, category: event.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="api-tags">تگ‌ها</Label>
-                    <Input
-                      id="api-tags"
-                      value={apiForm.tags}
-                      placeholder="sms, webhook, realtime"
-                      onChange={(event) => setApiForm((current) => ({ ...current, tags: event.target.value }))}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="api-description">توضیح کوتاه</Label>
-                  <Textarea
-                    id="api-description"
-                    required
-                    rows={4}
-                    value={apiForm.description}
-                    placeholder="این API چه مسئله‌ای را برای توسعه‌دهنده حل می‌کند؟"
-                    onChange={(event) => setApiForm((current) => ({ ...current, description: event.target.value }))}
-                  />
-                </div>
-
-                <div className="rounded-md border border-amber-400/30 bg-amber-400/10 p-3 text-sm leading-7 text-muted-foreground">
-                  کلید واقعی، توکن، secret یا credential تولیدی را اینجا وارد نکنید. این بخش فقط metadata امن API را برای بررسی و ثبت در خزانه آماده می‌کند.
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-                  <Button type="submit" className="gap-2">
-                    <Sparkles className="h-4 w-4" />
-                    ذخیره پیش‌نویس API
-                  </Button>
-                  <Button type="button" variant="outline" className="gap-2" onClick={handleCopyManifest}>
-                    {manifestCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                    کپی Manifest
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-
-          <Card className="surface-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Code2 className="h-5 w-5 text-primary" />
-                پیش‌نمایش ثبت API
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <pre className="max-h-72 overflow-auto rounded-md border border-border/60 bg-black/40 p-4 text-left text-xs leading-6 text-cyan-100" dir="ltr">
-                <code>{apiManifest}</code>
-              </pre>
-
-              <div className="space-y-3">
-                <p className="text-sm font-semibold text-foreground">پیش‌نویس‌های اخیر</p>
-                {apiDrafts.length > 0 ? (
-                  apiDrafts.map((draft) => (
-                    <div key={draft.id} className="rounded-md border border-border/60 p-4">
-                      <div className="mb-2 flex items-center justify-between gap-3">
-                        <p className="font-semibold">{draft.name}</p>
-                        <Badge variant="secondary">{draft.authScheme}</Badge>
-                      </div>
-                      <p className="truncate text-sm text-muted-foreground" dir="ltr">
-                        {draft.baseUrl}
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {(draft.tags.length ? draft.tags : ["draft"]).map((tag) => (
-                          <Badge key={tag} variant="outline">
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="empty-state text-sm leading-7 text-muted-foreground">
-                    هنوز API جدیدی آماده نشده است. اولین metadata امن را ثبت کنید تا داشبورد آن را مثل یک ورودی تازه در صف بررسی نگه دارد.
-                  </div>
-                )}
+              <div className="rounded-md border border-primary/20 bg-primary/10 p-4">
+                <p className="font-semibold">{planName}</p>
+                <p className="mt-1 text-sm text-muted-foreground">اشتراک فعلی فضای کاری</p>
               </div>
             </CardContent>
           </Card>
         </section>
 
-        <section className="grid gap-8 lg:grid-cols-[0.9fr,1.1fr]">
-          <Card className="surface-card">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <RadioTower className="h-5 w-5 text-primary" />
-                دسترسی و اشتراک
-              </CardTitle>
-              <Button variant="outline" asChild>
-                <Link to="/pricing">مرور پلن‌ها</Link>
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-md bg-muted/40 p-4 text-sm leading-7 text-muted-foreground">
-                IranAPI برای دسترسی تولیدی به APIها از مدل دسترسی مدیریت‌شده داخلی استفاده می‌کند. اگر پلنی هنوز در حساب شما فعال نشده، از بخش قیمت‌گذاری وارد مسیر فعال‌سازی همان سرویس شوید.
-              </div>
-              <SecretPreview value={profile?.api_key_preview || profile?.api_key} hasSecret={profile?.has_api_key} />
-              <SecurityNotice />
+        <RapidApiSyncPanel compact />
 
-              {activeAccess ? (
-                <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm leading-7 text-muted-foreground">
-                  <p className="mb-1 font-semibold text-foreground">وضعیت فعلی</p>
-                  <p>
-                    اشتراک فعال شما برای {activeAccess.api.name} ثبت شده و سقف روزانه آن {activeAccess.requests_per_day?.toLocaleString("fa-IR") || "نامشخص"} درخواست است.
+        <section className="section-frame space-y-6">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="space-y-2">
+              <p className="eyebrow">داده‌های همگام</p>
+              <h2 className="text-2xl font-bold md:text-3xl">APIهای پیشنهادی همان کاتالوگ سایت</h2>
+              <p className="section-copy">
+                کارت‌ها از همان منبع صفحه کشف تغذیه می‌شوند و وضعیت، احراز هویت، قیمت و سلامت عملیاتی را یکپارچه نشان می‌دهند.
+              </p>
+            </div>
+            <Button variant="outline" asChild>
+              <Link to="/browse">دیدن همه APIها</Link>
+            </Button>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {visibleApis.map((api) => (
+              <Card key={api.slug} className="surface-card">
+                <CardHeader className="space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <Badge variant="outline">{api.category?.name || "بدون دسته"}</Badge>
+                    <ApiStatusBadge status={api.status} />
+                  </div>
+                  <CardTitle>{api.name}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="min-h-16 text-sm leading-7 text-muted-foreground">
+                    {api.short_description || "توضیح کوتاه این API هنوز ثبت نشده است."}
                   </p>
-                </div>
-              ) : null}
-
-              {accessGrants?.results && accessGrants.results.length > 0 ? (
-                accessGrants.results.map((grant) => (
-                  <div key={grant.id} className="rounded-md border border-border/60 p-4">
-                    <div className="mb-3 flex items-center justify-between gap-4">
-                      <div>
-                        <p className="font-semibold">{grant.api.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {grant.pricing_plan?.name || "بدون پلن متصل"} • {grant.source}
-                        </p>
-                      </div>
-                      <Badge variant={grant.status === "active" ? "default" : "secondary"}>{grant.status}</Badge>
-                    </div>
-                    <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-                      <p>سقف روزانه: {grant.requests_per_day?.toLocaleString("fa-IR") || "نامشخص"}</p>
-                      <p>سقف ماهانه: {grant.requests_per_month?.toLocaleString("fa-IR") || "نامشخص"}</p>
-                    </div>
-                    <Button variant="link" className="mt-2 px-0" asChild>
-                      <Link to={`/api/${grant.api.slug}`}>مدیریت سرویس در IranAPI</Link>
-                    </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <HealthSignalBadge />
+                    <AuthSchemeBadge scheme={api.rapidapi.public_auth_scheme} />
+                    <MethodBadge method={api.endpoints?.[0]?.method || "GET"} />
                   </div>
-                ))
-              ) : (
-                <div className="empty-state text-sm leading-7 text-muted-foreground">
-                  هنوز دسترسی فعالی برای این حساب ثبت نشده است. از بخش قیمت‌گذاری یک API را انتخاب کنید و دسترسی آن را در IranAPI فعال کنید.
-                </div>
-              )}
+                  <div className="grid gap-3 rounded-md bg-muted/50 p-4 text-sm sm:grid-cols-2">
+                    <div>
+                      <p className="text-muted-foreground">امتیاز</p>
+                      <p className="font-semibold">{api.rating}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">شروع قیمت</p>
+                      <p className="font-semibold">{formatCurrencyLabel(api.pricing_from)}</p>
+                    </div>
+                  </div>
+                  <Button className="w-full" asChild>
+                    <Link to={`/api/${api.slug}`}>مشاهده جزئیات و مستندات</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        <section className="section-frame grid gap-6 lg:grid-cols-[1fr,1fr]">
+          <Card className="surface-card">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <KeyRound className="h-5 w-5 text-primary" />
+                کلید و نمونه اتصال
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <code className="block rounded-md border border-border bg-background/70 p-3 text-left text-xs text-muted-foreground" dir="ltr">
+                {profile?.api_key_preview || "No key generated"}
+              </code>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Button className="gap-2" onClick={rotateKey} disabled={generateLegacyAPIKey.isPending}>
+                  <Zap className="h-4 w-4" />
+                  {generateLegacyAPIKey.isPending ? "در حال ساخت..." : profile?.has_api_key ? "چرخش کلید" : "ساخت کلید"}
+                </Button>
+                <Button variant="outline" className="gap-2" onClick={copyIntegration}>
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  کپی نمونه
+                </Button>
+              </div>
+              <pre className="max-h-44 overflow-auto rounded-md border border-border bg-slate-950 p-3 text-left text-xs leading-6 text-cyan-100" dir="ltr">
+                <code>{integrationSnippet}</code>
+              </pre>
             </CardContent>
           </Card>
 
@@ -492,150 +300,37 @@ export default function Dashboard() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <ShieldCheck className="h-5 w-5 text-primary" />
-                پیشنهاد و مصرف
+                دسترسی‌ها و دسته‌ها
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {usageStats?.top_apis && usageStats.top_apis.length > 0 ? (
-                usageStats.top_apis.map((item) => (
-                  <div key={item.slug} className="rounded-md border border-border/60 p-4">
-                    <div className="mb-2 flex items-center justify-between gap-4">
-                      <p className="font-semibold">{item.name}</p>
-                      <Badge variant="secondary">{item.requests_count.toLocaleString("fa-IR")} درخواست</Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{item.slug}</p>
-                    <Button variant="link" className="mt-2 px-0" asChild>
-                      <Link to={`/api/${item.slug}`}>بررسی جزئیات سرویس</Link>
-                    </Button>
-                  </div>
-                ))
-              ) : (
-                <p className="text-muted-foreground">هنوز داده مصرفی معناداری برای این حساب ثبت نشده است.</p>
-              )}
-            </CardContent>
-          </Card>
-        </section>
-
-        <section className="grid gap-8 lg:grid-cols-2">
-          <Card className="surface-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <UserRound className="h-5 w-5 text-primary" />
-                اطلاعات حساب
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-4" onSubmit={handleAccountSubmit}>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="first_name">نام</Label>
-                    <Input
-                      id="first_name"
-                      value={accountForm.first_name}
-                      onChange={(event) => setAccountForm((current) => ({ ...current, first_name: event.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="last_name">نام خانوادگی</Label>
-                    <Input
-                      id="last_name"
-                      value={accountForm.last_name}
-                      onChange={(event) => setAccountForm((current) => ({ ...current, last_name: event.target.value }))}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">ایمیل</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={accountForm.email}
-                    onChange={(event) => setAccountForm((current) => ({ ...current, email: event.target.value }))}
-                  />
-                </div>
-                <Button type="submit" className="gap-2" disabled={updateUser.isPending}>
-                  <Save className="h-4 w-4" />
-                  ذخیره اطلاعات حساب
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-
-          <Card className="surface-card">
-            <CardHeader>
-              <CardTitle>پروفایل توسعه‌دهنده</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-4" onSubmit={handleProfileSubmit}>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">شماره تماس</Label>
-                    <Input
-                      id="phone"
-                      value={profileForm.phone}
-                      onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="company">شرکت</Label>
-                    <Input
-                      id="company"
-                      value={profileForm.company}
-                      onChange={(event) => setProfileForm((current) => ({ ...current, company: event.target.value }))}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="avatar">آدرس تصویر پروفایل</Label>
-                  <Input
-                    id="avatar"
-                    value={profileForm.avatar}
-                    onChange={(event) => setProfileForm((current) => ({ ...current, avatar: event.target.value }))}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="bio">بیو</Label>
-                  <Textarea
-                    id="bio"
-                    rows={5}
-                    value={profileForm.bio}
-                    onChange={(event) => setProfileForm((current) => ({ ...current, bio: event.target.value }))}
-                  />
-                </div>
-                <Button type="submit" className="gap-2" disabled={updateProfile.isPending}>
-                  <Save className="h-4 w-4" />
-                  ذخیره پروفایل
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </section>
-
-        <Card className="surface-card">
-          <CardHeader>
-            <CardTitle>سوابق مصرف</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {usage?.results && usage.results.length > 0 ? (
-              usage.results.map((item) => (
-                <div key={item.id} className="rounded-md border border-border/60 p-4">
-                  <div className="mb-2 flex items-center justify-between gap-4">
-                    <p className="font-semibold">{item.api.name}</p>
-                    <Badge variant="outline">{item.requests_count.toLocaleString("fa-IR")} درخواست</Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    منبع ثبت: {item.source} • آخرین استفاده: {formatDateTimeFa(item.last_used)}
-                  </p>
-                  <Button variant="link" className="mt-2 px-0" asChild>
-                    <Link to={`/api/${item.api.slug}`}>مدیریت سرویس در IranAPI</Link>
+            <CardContent className="space-y-5">
+              <div className="grid gap-2 sm:grid-cols-2">
+                {topCategories.map((category) => (
+                  <Button key={category.slug} variant="outline" className="justify-between" asChild>
+                    <Link to={`/browse?category=${category.slug}`}>
+                      <span>{category.name}</span>
+                      <span className="text-xs opacity-70">{formatFaNumber(category.apis_count)}</span>
+                    </Link>
                   </Button>
-                </div>
-              ))
-            ) : (
-              <p className="text-muted-foreground">هنوز سابقه‌ای برای این حساب وجود ندارد.</p>
-            )}
-          </CardContent>
-        </Card>
+                ))}
+              </div>
+
+              <div className="space-y-3">
+                {(accessGrants?.results || []).slice(0, 3).map((grant) => (
+                  <Link
+                    key={grant.id}
+                    to={`/api/${grant.api.slug}`}
+                    className="flex items-center gap-3 rounded-md border border-border bg-background/70 p-3 hover:border-primary/40"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{grant.api.name}</span>
+                    <Badge variant={grant.status === "active" ? "default" : "secondary"}>{grant.status}</Badge>
+                  </Link>
+                ))}
+                {!accessGrants?.results.length ? <p className="text-sm text-muted-foreground">هنوز دسترسی فعالی ثبت نشده است.</p> : null}
+              </div>
+            </CardContent>
+          </Card>
+        </section>
       </main>
 
       <Footer />
