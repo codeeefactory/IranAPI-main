@@ -34,6 +34,7 @@ for attempt in range(30):
         time.sleep(1)
 PY
 
+python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 
 exec "$@"

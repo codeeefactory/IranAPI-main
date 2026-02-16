@@ -32,9 +32,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential libjpeg-dev zlib1g-dev \
-    && groupadd --system iranapi \
+RUN groupadd --system iranapi \
     && useradd --system --gid iranapi --create-home --home-dir /home/iranapi iranapi \
     && rm -rf /var/lib/apt/lists/*
 

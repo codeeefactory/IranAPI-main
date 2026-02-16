@@ -21,4 +21,5 @@ for attempt in range(30):
         time.sleep(1)
 PY
 
+python manage.py migrate --noinput
 exec python manage.py runserver 0.0.0.0:8000

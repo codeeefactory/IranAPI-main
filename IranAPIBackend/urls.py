@@ -1,11 +1,13 @@
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib import admin
 from django.urls import include, path, re_path
 
 from .site_views import frontend_app, robots_txt, sitemap_xml
 
 
 urlpatterns = [
+    path("admin/", admin.site.urls),
     re_path(
         r"^api/(?!(?:v1|auth|health|usage|profile|categories|apis|pricing-plans|documentations)/)(?P<slug>[-\w]+)/?$",
         frontend_app,
