@@ -23,6 +23,9 @@ const statusStyles: Record<string, { className: string; label: string; icon: typ
 const authSchemeLabels: Record<string, string> = {
   rapidapi_proxy: "Proxy",
   api_key: "API Key",
+  bearer: "Bearer",
+  oauth2: "OAuth 2.0",
+  basic: "Basic Auth",
   none: "Public",
 };
 
@@ -53,10 +56,10 @@ export function HealthSignalBadge({ className }: { className?: string }) {
     <Badge
       variant="outline"
       className={cn("gap-2 border-accent/35 bg-accent/10 text-accent", className)}
-      title="Operational health signal"
+      title="وضعیت عملیاتی سرویس"
     >
       <span className="api-health-orbit" aria-hidden="true" />
-      Healthy
+      پایدار
     </Badge>
   );
 }
@@ -81,7 +84,7 @@ export function SecretPreview({ value, hasSecret }: { value?: string | null; has
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 font-semibold text-foreground">
           <KeyRound className="h-4 w-4 text-primary" aria-hidden="true" />
-          خزانه کلید API
+          کلید API
         </div>
         {hasSecret ? (
           <Button
@@ -92,7 +95,7 @@ export function SecretPreview({ value, hasSecret }: { value?: string | null; has
             onClick={() => setPreviewVisible((current) => !current)}
           >
             {previewVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            {previewVisible ? "پنهان‌سازی" : "نمایش پیش‌نمایش"}
+            {previewVisible ? "پنهان‌سازی" : "نمایش امن"}
           </Button>
         ) : null}
       </div>
@@ -100,8 +103,7 @@ export function SecretPreview({ value, hasSecret }: { value?: string | null; has
         {hasSecret ? (previewVisible ? visibleValue : "••••••••••••••••") : "کلیدی برای این حساب ثبت نشده است"}
       </code>
       <p className="text-xs leading-6 text-muted-foreground">
-        کلید خام در رابط عمومی یا متادیتای صفحه نمایش داده نمی‌شود. این کنترل فقط پیش‌نمایش ماسک‌شده را بعد از اقدام
-        کاربر نشان می‌دهد.
+        کلید خام در رابط عمومی یا متادیتای صفحه نمایش داده نمی‌شود. این کنترل فقط پس از اقدام کاربر مقدار ماسک‌شده را نشان می‌دهد.
       </p>
     </div>
   );
@@ -112,9 +114,9 @@ export function SecurityNotice({ className }: { className?: string }) {
     <div className={cn("rounded-md border border-accent/25 bg-accent/10 p-4 text-sm leading-7 text-muted-foreground", className)}>
       <p className="mb-1 flex items-center gap-2 font-semibold text-foreground">
         <ShieldCheck className="h-4 w-4 text-accent" aria-hidden="true" />
-        پروتکل امنیتی خزانه
+        نکته امنیتی
       </p>
-      <p>Secretها ماسک می‌شوند، مسیرهای خصوصی no-store هستند، و نمونه‌های درخواست فقط placeholder امن نشان می‌دهند.</p>
+      <p>Secretها ماسک می‌شوند، مسیرهای خصوصی no-store هستند و نمونه‌های درخواست فقط مقدار placeholder امن نمایش می‌دهند.</p>
     </div>
   );
 }

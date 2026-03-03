@@ -32,7 +32,7 @@ export default function SignIn() {
 
   usePageMetadata({
     title: "ورود",
-    description: "برای ورود به پرتال IranAPI، دسترسی به داشبورد و مدیریت نشست توسعه‌دهنده از این صفحه استفاده کنید.",
+    description: "وارد حساب IranAPI شوید و داشبورد، دسترسی‌ها و گزارش مصرف خود را مدیریت کنید.",
     path: "/signin",
     noindex: true,
   });
@@ -72,20 +72,20 @@ export default function SignIn() {
             <CardHeader className="space-y-4">
               <div className="flex flex-wrap items-center gap-3">
                 <Badge variant="outline">ورود امن</Badge>
-                <Badge variant="outline">Portal Access</Badge>
+                <Badge variant="outline">Account Access</Badge>
               </div>
               <div className="space-y-3">
                 <p className="eyebrow">حساب توسعه‌دهنده</p>
-                <CardTitle className="text-3xl">ورود به پنل IranAPI</CardTitle>
+                <CardTitle className="text-3xl">ورود به حساب IranAPI</CardTitle>
                 <p className="text-sm leading-7 text-muted-foreground">
-                  این حساب برای مدیریت پروفایل، داشبورد، دسترسی‌های ثبت‌شده، کلیدهای امن و تاریخچه مصرف استفاده می‌شود. فعال‌سازی APIها داخل مسیر مستقل IranAPI انجام می‌شود.
+                  از این حساب برای مدیریت پروفایل، دسترسی‌های ثبت‌شده، کلیدهای امن و تاریخچه مصرف استفاده می‌کنید.
                 </p>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
               {nextPath !== "/dashboard" ? (
                 <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm leading-7 text-muted-foreground">
-                  برای ادامه مسیر موردنظر، ابتدا وارد حساب خود شوید. پس از ورود به‌صورت خودکار به صفحه قبلی برمی‌گردید.
+                  برای ادامه، ابتدا وارد حساب خود شوید. بعد از ورود به صفحه قبلی برمی‌گردید.
                 </div>
               ) : null}
 
@@ -100,8 +100,8 @@ export default function SignIn() {
 
               <form className="space-y-4 rounded-md border border-border/70 bg-background/45 p-4 shadow-[inset_0_1px_0_hsl(var(--foreground)/0.07)]" onSubmit={handleSubmit} aria-busy={login.isPending}>
                 <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                  <span className="font-black uppercase tracking-[0.22em] text-primary">Credential Vault</span>
-                  <span>Session cookie secured</span>
+                  <span className="font-black uppercase tracking-[0.22em] text-primary">ورود امن</span>
+                  <span>نشست محافظت‌شده</span>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="username">نام کاربری</Label>
@@ -151,23 +151,23 @@ export default function SignIn() {
                 <div className="metric-card">
                   <p className="mb-2 flex items-center gap-2 font-semibold text-foreground">
                     <LayoutDashboard className="h-4 w-4 text-primary" />
-                    دسترسی مستقیم به داشبورد
+                    داشبورد آماده مدیریت
                   </p>
-                  <p>پس از ورود می‌توانید پروفایل، تاریخچه مصرف، دسترسی‌های فعال و مسیرهای پیشنهادی برای مدیریت اشتراک را در یک نگاه بررسی کنید.</p>
+                  <p>پس از ورود می‌توانید پروفایل، مصرف، دسترسی‌های فعال و اشتراک‌ها را در یک نگاه بررسی کنید.</p>
                 </div>
                 <div className="metric-card">
                   <p className="mb-2 flex items-center gap-2 font-semibold text-foreground">
                     <ShieldCheck className="h-4 w-4 text-primary" />
-                    مدیریت امن نشست
+                    نشست امن
                   </p>
-                  <p>ورود از طریق نشست امن انجام می‌شود و کلاینت فقط به داده‌های موردنیاز پرتال دسترسی دارد.</p>
+                  <p>ورود با نشست محافظت‌شده انجام می‌شود و رابط فقط داده‌های موردنیاز حساب شما را دریافت می‌کند.</p>
                 </div>
                 <div className="metric-card">
                   <p className="mb-2 flex items-center gap-2 font-semibold text-foreground">
                     <KeyRound className="h-4 w-4 text-primary" />
-                    تفکیک روشن نقش‌ها
+                    نقش‌ها و دسترسی‌های روشن
                   </p>
-                  <p>این حساب برای خود پرتال است و دسترسی مصرفی APIها از مسیر داخلی IranAPI مدیریت می‌شود.</p>
+                  <p>حساب پرتال از دسترسی مصرفی APIها جداست و هر دسترسی از داشبورد قابل پیگیری است.</p>
                 </div>
               </CardContent>
             </Card>

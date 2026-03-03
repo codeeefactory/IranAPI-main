@@ -18,6 +18,7 @@ import { Link } from "react-router-dom";
 
 import { Footer } from "@/components/Footer";
 import { Navigation } from "@/components/Navigation";
+import { RapidApiSyncPanel } from "@/components/RapidApiSyncPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,18 +36,18 @@ const operatingSignals = [
 
 const playbooks = [
   {
-    title: "ساخت حساب و آماده‌سازی دسترسی",
-    copy: "ابتدا حساب توسعه‌دهنده بسازید، سپس از داشبورد وضعیت پروفایل، نشست فعال و مسیر دسترسی به سرویس‌ها را کنترل کنید.",
+    title: "ساخت حساب و تکمیل پروفایل",
+    copy: "حساب توسعه‌دهنده را بسازید، پروفایل را کامل کنید و از داشبورد وضعیت دسترسی‌ها و مصرف سرویس‌ها را ببینید.",
     icon: TerminalSquare,
   },
   {
-    title: "بررسی مستندات و قرارداد API",
-    copy: "برای هر سرویس، توضیح فنی، پلن‌ها، مسیر فعال‌سازی و نمونه قرارداد داده را کنار هم بخوانید تا انتخاب سریع‌تر شود.",
+    title: "بررسی مستندات و نمونه درخواست",
+    copy: "برای هر سرویس، توضیح فنی، پلن‌ها، وضعیت دسترسی و نمونه درخواست را کنار هم بخوانید تا تصمیم‌گیری ساده‌تر شود.",
     icon: FileCode2,
   },
   {
-    title: "فعال‌سازی اشتراک و پایش مصرف",
-    copy: "فعال‌سازی دسترسی از مسیر مستقل IranAPI انجام می‌شود و مصرف از پرتال قابل پیگیری است.",
+    title: "فعال‌سازی پلن و پایش مصرف",
+    copy: "پلن مناسب را انتخاب کنید و بعد از فعال‌سازی، مصرف و وضعیت سرویس را از پرتال پیگیری کنید.",
     icon: Activity,
   },
 ];
@@ -70,7 +71,7 @@ export default function Documentation() {
   usePageMetadata({
     title: "مستندات",
     description:
-      "مستندات زنده، راهنماهای فنی و مسیر فعال‌سازی سرویس‌ها را در مرکز راهنمای IranAPI مرور کنید.",
+      "مستندات فنی، نمونه درخواست‌ها و وضعیت سرویس‌ها را در مرکز راهنمای IranAPI مرور کنید.",
     path: "/documentation",
     structuredData: [
       createBreadcrumbSchema([
@@ -110,13 +111,13 @@ export default function Documentation() {
             <div className="space-y-6">
               <span className="cyber-kicker">
                 <CircuitBoard className="h-4 w-4" />
-                مرکز عملیات مستندات
+                مرکز مستندات توسعه‌دهنده
               </span>
 
               <div className="space-y-4">
-                <h1 className="cyber-display">راهنمای زنده برای اتصال، تست و انتشار APIها</h1>
+                <h1 className="cyber-display">مستندات روشن برای اتصال سریع‌تر به APIها</h1>
                 <p className="section-copy">
-                  این صفحه مثل یک کنسول توسعه‌دهنده عمل می‌کند: مستندات بک‌اند را می‌خواند، جست‌وجو و فیلتر را همزمان نگه می‌دارد و مسیر عملیاتی هر سرویس را بدون شلوغی نشان می‌دهد.
+                  این صفحه مستندات بک‌اند را به شکل قابل جست‌وجو نمایش می‌دهد، فیلتر هر API را نگه می‌دارد و مسیر استفاده از هر سرویس را بدون شلوغی نشان می‌دهد.
                 </p>
               </div>
 
@@ -136,13 +137,13 @@ export default function Documentation() {
               <div className="flex flex-wrap gap-3">
                 <Button size="lg" asChild>
                   <Link to="/browse" className="gap-2">
-                    مرور APIها
+                    کشف APIها
                     <ArrowLeft className="h-4 w-4" />
                   </Link>
                 </Button>
                 <Button size="lg" variant="outline" asChild>
                   <Link to="/api/speech-gateway" className="gap-2">
-                    نمونه سرویس
+                    مشاهده نمونه سرویس
                     <ExternalLink className="h-4 w-4" />
                   </Link>
                 </Button>
@@ -166,7 +167,7 @@ export default function Documentation() {
                 <div className="rounded-md border border-accent/25 bg-accent/10 p-4">
                   <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
                     <Zap className="h-4 w-4 text-accent" />
-                    وضعیت زنده
+                    وضعیت مستندات
                   </div>
                   <div className="grid gap-2 text-sm text-muted-foreground">
                     <span>docs: {isLoading ? "syncing..." : `${formatFaNumber(documentationItems.length)} سند فعال`}</span>
@@ -179,6 +180,8 @@ export default function Documentation() {
           </div>
         </section>
 
+        <RapidApiSyncPanel compact />
+
         <section className="docs-control-deck">
           <div className="space-y-2">
             <label htmlFor="documentation-search" className="text-sm font-semibold text-foreground">
@@ -190,7 +193,7 @@ export default function Documentation() {
                 id="documentation-search"
                 value={searchValue}
                 onChange={(event) => setSearchValue(event.target.value)}
-                placeholder="عنوان، محتوا یا کلیدواژه فنی را وارد کنید"
+                placeholder="عنوان، محتوا یا کلیدواژه فنی"
                 className="h-12 pr-9"
               />
             </div>
@@ -198,7 +201,7 @@ export default function Documentation() {
 
           <div className="space-y-2">
             <label htmlFor="documentation-api" className="text-sm font-semibold text-foreground">
-              فیلتر API
+              فیلتر بر اساس API
             </label>
             <select
               id="documentation-api"
@@ -216,7 +219,7 @@ export default function Documentation() {
           </div>
 
           <div className="docs-count-card">
-            <span>نتیجه فعال</span>
+            <span>سند پیدا شده</span>
             <strong>{isLoading ? "..." : formatFaNumber(filteredDocs.length)}</strong>
           </div>
         </section>
@@ -226,7 +229,7 @@ export default function Documentation() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <BookOpen className="h-5 w-5 text-primary" />
-                فهرست مستندات
+                مستندات موجود
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -252,8 +255,8 @@ export default function Documentation() {
               ) : (
                 <div className="empty-state">
                   <Braces className="h-8 w-8 text-primary" />
-                  <p className="font-semibold text-foreground">برای این فیلتر مستندی پیدا نشد.</p>
-                  <p className="text-sm text-muted-foreground">عبارت جست‌وجو را کوتاه‌تر کنید یا فیلتر API را به همه سرویس‌ها برگردانید.</p>
+                  <p className="font-semibold text-foreground">برای این فیلتر سندی پیدا نشد.</p>
+                  <p className="text-sm text-muted-foreground">عبارت جست‌وجو را ساده‌تر کنید یا فیلتر API را روی همه سرویس‌ها بگذارید.</p>
                 </div>
               )}
             </CardContent>

@@ -1,4 +1,4 @@
-import { BookOpen, Check, Copy, ExternalLink, Eye, Star } from "lucide-react";
+import { BookOpen, Check, Copy, ExternalLink, Eye, Play, Server, Star } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ApiStatusBadge, AuthSchemeBadge, HealthSignalBadge, MethodBadge, SecurityNotice } from "@/components/ApiVaultBadges";
 import { Footer } from "@/components/Footer";
 import { Navigation } from "@/components/Navigation";
+import { RapidApiSyncPanel } from "@/components/RapidApiSyncPanel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +14,7 @@ import { useAPI, useRateAPI, useSession, useSimilarAPIs } from "@/hooks/useApi";
 import { getApiDetailBootstrap } from "@/lib/bootstrap";
 import { createBreadcrumbSchema, usePageMetadata } from "@/lib/metadata";
 import { formatCurrencyLabel, formatFaNumber, SITE_NAME, toSiteUrl } from "@/lib/site";
+import type { APIEndpoint } from "@/lib/api";
 
 const accessSchemeLabels: Record<string, string> = {
   rapidapi_proxy: "دروازه اختصاصی IranAPI",
@@ -86,16 +88,44 @@ function buildApiUrl(baseUrl: string, path: string) {
   return `${baseUrl.replace(/\/+$/, "")}${path}`;
 }
 
+function defaultEndpointForApi(api: { slug: string; endpoints?: APIEndpoint[] }) {
+  const endpoint = api.endpoints?.[0];
+  if (endpoint) {
+    return {
+      method: endpoint.method,
+      path: endpoint.path,
+      payload: endpoint.sample_request || {},
+      response: endpoint.sample_response || { ok: true },
+      name: endpoint.name,
+    };
+  }
+
+  const sample = samplePathForApi(api.slug);
+  return {
+    method: "POST",
+    path: sample.path,
+    payload: sample.payload,
+    response: { ok: true, data: { accepted: true } },
+    name: "Sample request",
+  };
+}
+
 function indentJson(value: unknown, spaces = 2) {
   return JSON.stringify(value, null, spaces);
 }
 
-function buildLanguageSamples(api: { base_url?: string; slug: string; rapidapi: { public_auth_scheme: string } }): CodeLanguage[] {
+function buildLanguageSamples(
+  api: { base_url?: string; slug: string; rapidapi: { public_auth_scheme: string }; endpoints?: APIEndpoint[] },
+  endpoint?: APIEndpoint,
+): CodeLanguage[] {
   if (!api.base_url) {
     return [];
   }
 
-  const { path, payload } = samplePathForApi(api.slug);
+  const fallback = defaultEndpointForApi(api);
+  const path = endpoint?.path || fallback.path;
+  const payload = endpoint?.sample_request || fallback.payload;
+  const method = (endpoint?.method || fallback.method).toUpperCase();
   const url = buildApiUrl(api.base_url, path);
   const needsAuth = api.rapidapi.public_auth_scheme === "rapidapi_proxy" || api.rapidapi.public_auth_scheme === "api_key";
   const headers = needsAuth ? jsonHeaders : { "Content-Type": "application/json" };
@@ -107,7 +137,7 @@ function buildLanguageSamples(api: { base_url?: string; slug: string; rapidapi: 
     {
       id: "curl",
       label: "cURL",
-      code: `curl --request POST \\
+      code: `curl --request ${method} \\
   --url '${url}' \\
   ${needsAuth ? "--header 'Authorization: Bearer <IRANAPI_API_KEY>' \\\n  --header 'X-IranAPI-Client: <CLIENT_ID>' \\\n  " : ""}--header 'Content-Type: application/json' \\
   --data '${compactPayload}'`,
@@ -116,7 +146,7 @@ function buildLanguageSamples(api: { base_url?: string; slug: string; rapidapi: 
       id: "javascript",
       label: "JavaScript",
       code: `const response = await fetch("${url}", {
-  method: "POST",
+  method: "${method}",
   headers: ${headersJson},
   body: JSON.stringify(${payloadJson}),
 });
@@ -136,7 +166,7 @@ console.log(data);`,
 const payload = ${payloadJson} satisfies Record<string, unknown>;
 
 const response = await fetch("${url}", {
-  method: "POST",
+  method: "${method}",
   headers: ${headersJson},
   body: JSON.stringify(payload),
 });
@@ -298,6 +328,8 @@ export default function ApiDetails() {
   const rateAPI = useRateAPI();
   const [copied, setCopied] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("curl");
+  const [selectedEndpointId, setSelectedEndpointId] = useState<number | null>(null);
+  const [tryResponse, setTryResponse] = useState<string | null>(null);
 
   usePageMetadata({
     title: api ? api.name : "جزئیات API",
@@ -308,7 +340,7 @@ export default function ApiDetails() {
       ? [
           createBreadcrumbSchema([
             { name: "خانه", path: "/" },
-            { name: "مرور APIها", path: "/browse" },
+            { name: "کشف APIها", path: "/browse" },
             { name: api.name, path: `/api/${api.slug}` },
           ]),
           {
@@ -344,7 +376,10 @@ export default function ApiDetails() {
       : undefined,
   });
 
-  const languageSamples = useMemo(() => (api ? buildLanguageSamples(api) : []), [api]);
+  const selectedEndpoint =
+    api?.endpoints?.find((endpoint) => endpoint.id === selectedEndpointId) || api?.endpoints?.[0] || null;
+  const endpointFallback = api ? defaultEndpointForApi(api) : null;
+  const languageSamples = useMemo(() => (api ? buildLanguageSamples(api, selectedEndpoint || undefined) : []), [api, selectedEndpoint]);
   const selectedSample = languageSamples.find((sample) => sample.id === selectedLanguage) || languageSamples[0];
 
   if (isLoading) {
@@ -368,7 +403,7 @@ export default function ApiDetails() {
               <h1 className="text-2xl font-bold">این API پیدا نشد</h1>
               <p className="text-muted-foreground">ممکن است شناسه URL اشتباه باشد یا سرویس از فهرست عمومی خارج شده باشد.</p>
               <Button asChild>
-                <Link to="/browse">بازگشت به مرور APIها</Link>
+                <Link to="/browse">بازگشت به فهرست APIها</Link>
               </Button>
             </CardContent>
           </Card>
@@ -388,10 +423,27 @@ export default function ApiDetails() {
       await navigator.clipboard.writeText(selectedSample.code);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1600);
-      toast.success(`Access granted: نمونه ${selectedSample.label} کپی شد.`);
+      toast.success(`نمونه ${selectedSample.label} کپی شد.`);
     } catch {
       toast.error("اجازه دسترسی به کلیپ‌بورد در این مرورگر در دسترس نیست.");
     }
+  };
+
+  const handleRunTest = () => {
+    const endpointName = selectedEndpoint?.name || endpointFallback?.name || "Sample request";
+    const response = selectedEndpoint?.sample_response || endpointFallback?.response || { ok: true };
+    setTryResponse(
+      indentJson(
+        {
+          status: 200,
+          endpoint: endpointName,
+          latency_ms: 86,
+          body: response,
+        },
+        2,
+      ),
+    );
+    toast.success("پاسخ آزمایشی آماده شد.");
   };
 
   return (
@@ -402,7 +454,7 @@ export default function ApiDetails() {
         <section className="page-hero grid gap-8 lg:grid-cols-[1.25fr,0.75fr]">
           <div className="space-y-6">
             <div className="flex flex-wrap items-center gap-3">
-              <Badge variant="outline">{api.category?.name || "عمومی"}</Badge>
+              <Badge variant="outline">{api.category?.name || "بدون دسته"}</Badge>
               {api.is_featured ? <Badge>ویژه</Badge> : null}
               {api.is_popular ? <Badge variant="secondary">محبوب</Badge> : null}
               <ApiStatusBadge status={api.status} />
@@ -413,7 +465,7 @@ export default function ApiDetails() {
             <div className="space-y-4">
               <h1 className="section-title">{api.name}</h1>
               <p className="section-copy">
-                {api.description || api.short_description || "برای این API توضیحی ثبت نشده است."}
+                {api.description || api.short_description || "توضیح این API هنوز ثبت نشده است."}
               </p>
             </div>
 
@@ -504,6 +556,72 @@ export default function ApiDetails() {
           </Card>
         </section>
 
+        <RapidApiSyncPanel compact />
+
+        <section className="section-frame grid gap-8 lg:grid-cols-[1fr,1fr]">
+          <Card className="surface-card">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Server className="h-5 w-5 text-primary" />
+                مسیرهای API
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {api.endpoints && api.endpoints.length > 0 ? (
+                api.endpoints.map((endpoint) => (
+                  <button
+                    key={endpoint.id}
+                    type="button"
+                    className={`w-full rounded-md border p-4 text-left transition hover:border-primary/60 ${
+                      selectedEndpoint?.id === endpoint.id ? "border-primary bg-primary/5" : "border-border/70 bg-background/70"
+                    }`}
+                    onClick={() => {
+                      setSelectedEndpointId(endpoint.id);
+                      setTryResponse(null);
+                    }}
+                  >
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <MethodBadge method={endpoint.method} />
+                      <code className="rounded bg-muted px-2 py-1 text-xs">{endpoint.path}</code>
+                      <Badge variant="outline">{endpoint.group}</Badge>
+                    </div>
+                    <p className="font-semibold">{endpoint.name}</p>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">{endpoint.summary}</p>
+                  </button>
+                ))
+              ) : (
+                <p className="text-muted-foreground">فهرست endpointها هنوز منتشر نشده است.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="surface-card">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>آزمایش endpoint</CardTitle>
+              <Button variant="outline" size="sm" className="gap-2" onClick={handleRunTest}>
+                <Play className="h-4 w-4" />
+                اجرا
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-md border border-border/70 bg-background/70 p-4">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <MethodBadge method={selectedEndpoint?.method || endpointFallback?.method || "POST"} />
+                  <code className="rounded bg-muted px-2 py-1 text-xs">
+                    {buildApiUrl(api.base_url || "https://api.example.dev", selectedEndpoint?.path || endpointFallback?.path || "/requests")}
+                  </code>
+                </div>
+                <pre className="overflow-x-auto rounded-md bg-slate-950 p-4 text-sm leading-7 text-slate-100">
+                  <code>{indentJson(selectedEndpoint?.sample_request || endpointFallback?.payload || {}, 2)}</code>
+                </pre>
+              </div>
+              <pre className="min-h-40 overflow-x-auto rounded-md bg-slate-950 p-4 text-sm leading-7 text-slate-100">
+                <code>{tryResponse || "برای شبیه‌سازی پاسخ، دکمه اجرا را بزنید."}</code>
+              </pre>
+            </CardContent>
+          </Card>
+        </section>
+
         <section className="section-frame grid gap-8 lg:grid-cols-[1fr,1fr]">
           <Card className="surface-card">
             <CardHeader className="flex flex-row items-center justify-between">
@@ -536,8 +654,7 @@ export default function ApiDetails() {
                 <code>{selectedSample?.code || "برای این API هنوز آدرس پایه ثبت نشده است."}</code>
               </pre>
               <p className="text-sm leading-7 text-muted-foreground">
-                نمونه بالا برای مسیر دسترسی مدیریت‌شده IranAPI ساخته شده است. کلیدها را در محیط امن نگه دارید و فقط در
-                زمان نیاز از داشبورد یا تنظیمات سرویس کپی کنید.
+                نمونه بالا برای دسترسی مدیریت‌شده IranAPI ساخته شده است. کلیدها را در محیط امن نگه دارید و فقط هنگام نیاز از داشبورد یا تنظیمات سرویس کپی کنید.
               </p>
               <SecurityNotice />
             </CardContent>

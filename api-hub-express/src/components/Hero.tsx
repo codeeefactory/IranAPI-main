@@ -27,7 +27,7 @@ export const Hero = () => {
             <div className="inline-flex items-center gap-2 rounded-md border border-primary/30 bg-gradient-to-r from-primary/10 to-secondary/10 px-6 py-3 backdrop-blur-xl transition-all duration-500 hover:shadow-glow-primary">
               <Sparkles className="h-4 w-4 text-primary animate-pulse-glow" />
               <span className="text-sm font-semibold bg-gradient-primary bg-clip-text text-transparent">
-                پلتفرم هوشمند API • دسترسی به بیش از ۴۰,۰۰۰ سرویس
+                پلتفرم IranAPI • تجربه بازار API با الهام از RapidAPI
               </span>
             </div>
           </div>
@@ -41,7 +41,7 @@ export const Hero = () => {
               </span>
             </h1>
             <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-              یکپارچه‌سازی سریع، مستندات کامل، و اتصال فوری به هزاران سرویس وب. 
+              یکپارچه‌سازی سریع، مستندات روشن و اتصال قابل پیگیری به سرویس‌های مورد نیاز محصول شما.
               <span className="text-primary font-semibold"> دقایقی تا راه‌اندازی فاصله دارید.</span>
             </p>
           </div>
@@ -76,10 +76,10 @@ export const Hero = () => {
                 <div className="flex items-center gap-2">
                   <Zap className="h-6 w-6 text-primary group-hover:animate-bounce-gentle" />
                   <div className="text-4xl font-black bg-gradient-primary bg-clip-text text-transparent">
-                    ۴۰,۰۰۰+
+                    زنده
                   </div>
                 </div>
-                <div className="text-sm font-semibold text-muted-foreground">API فعال</div>
+                <div className="text-sm font-semibold text-muted-foreground">کاتالوگ IranAPI</div>
               </div>
             </div>
 
@@ -89,10 +89,10 @@ export const Hero = () => {
                 <div className="flex items-center gap-2">
                   <TrendingUp className="h-6 w-6 text-secondary group-hover:animate-bounce-gentle" />
                   <div className="text-4xl font-black bg-gradient-secondary bg-clip-text text-transparent">
-                    ۴M+
+                    تیمی
                   </div>
                 </div>
-                <div className="text-sm font-semibold text-muted-foreground">کاربر فعال</div>
+                <div className="text-sm font-semibold text-muted-foreground">داشبورد مشترک</div>
               </div>
             </div>
 

@@ -33,7 +33,7 @@ export default function SignUp() {
 
   usePageMetadata({
     title: "ثبت‌نام",
-    description: "حساب توسعه‌دهنده IranAPI را بسازید تا به داشبورد، مشخصات کاربری و گزارش‌های مصرف دسترسی داشته باشید.",
+    description: "حساب توسعه‌دهنده IranAPI را بسازید و داشبورد، دسترسی‌ها و گزارش مصرف خود را مدیریت کنید.",
     path: "/signup",
     noindex: true,
   });
@@ -87,13 +87,13 @@ export default function SignUp() {
             <CardHeader className="space-y-4">
               <div className="flex flex-wrap items-center gap-3">
                 <Badge variant="outline">ثبت‌نام توسعه‌دهنده</Badge>
-                <Badge variant="outline">IranAPI Access</Badge>
+                <Badge variant="outline">Developer Account</Badge>
               </div>
               <div className="space-y-3">
                 <p className="eyebrow">ساخت حساب</p>
-                <CardTitle className="text-3xl">ایجاد حساب پرتال IranAPI</CardTitle>
+                <CardTitle className="text-3xl">ساخت حساب IranAPI</CardTitle>
                 <p className="text-sm leading-7 text-muted-foreground">
-                  با این حساب به داشبورد، پروفایل توسعه‌دهنده، وضعیت دسترسی‌ها، کلیدهای امن و گزارش مصرف دسترسی پیدا می‌کنید. فعال‌سازی مصرفی APIها داخل IranAPI انجام می‌شود.
+                  با این حساب به داشبورد، پروفایل توسعه‌دهنده، وضعیت دسترسی‌ها، کلیدهای امن و گزارش مصرف دسترسی پیدا می‌کنید.
                 </p>
               </div>
             </CardHeader>
@@ -109,8 +109,8 @@ export default function SignUp() {
 
               <form className="space-y-4 rounded-md border border-border/70 bg-background/45 p-4 shadow-[inset_0_1px_0_hsl(var(--foreground)/0.07)]" onSubmit={handleSubmit} aria-busy={register.isPending}>
                 <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                  <span className="font-black uppercase tracking-[0.22em] text-primary">Identity Forge</span>
-                  <span>API vault profile</span>
+                  <span className="font-black uppercase tracking-[0.22em] text-primary">اطلاعات حساب</span>
+                  <span>پروفایل توسعه‌دهنده</span>
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
@@ -244,23 +244,23 @@ export default function SignUp() {
                 <div className="metric-card">
                   <p className="mb-2 flex items-center gap-2 font-semibold text-foreground">
                     <CheckCircle2 className="h-4 w-4 text-primary" />
-                    بعد از ثبت‌نام چه چیزهایی فعال می‌شود؟
+                    بعد از ثبت‌نام چه چیزی دارید؟
                   </p>
-                  <p>دسترسی به داشبورد، ثبت و ویرایش اطلاعات حساب، مدیریت پروفایل توسعه‌دهنده و مشاهده داده‌های مصرفی.</p>
+                  <p>دسترسی به داشبورد، ویرایش اطلاعات حساب، مدیریت پروفایل توسعه‌دهنده و مشاهده گزارش مصرف.</p>
                 </div>
                 <div className="metric-card">
                   <p className="mb-2 flex items-center gap-2 font-semibold text-foreground">
                     <ShieldCheck className="h-4 w-4 text-primary" />
-                    مسیر روشن دسترسی API
+                    مسیر شفاف دسترسی API
                   </p>
-                  <p>این فرم حساب پرتال را ایجاد می‌کند. فعال‌سازی پلن API از مسیر مدیریت‌شده IranAPI انجام می‌شود تا دسترسی، مصرف و کلیدها شفاف بمانند.</p>
+                  <p>این فرم حساب پرتال را ایجاد می‌کند. فعال‌سازی پلن‌های API از داشبورد انجام می‌شود تا دسترسی، مصرف و کلیدها قابل پیگیری بمانند.</p>
                 </div>
                 <div className="metric-card">
                   <p className="mb-2 flex items-center gap-2 font-semibold text-foreground">
                     <KeyRound className="h-4 w-4 text-primary" />
-                    حداقل استاندارد امنیت
+                    استاندارد پایه امنیت
                   </p>
-                  <p>برای رمز عبور حداقل طول ۸ کاراکتر اعمال شده و نشست کاربر از مسیر امن و مبتنی بر کوکی مدیریت می‌شود.</p>
+                  <p>حداقل طول رمز عبور ۸ کاراکتر است و نشست کاربر با کوکی امن مدیریت می‌شود.</p>
                 </div>
               </CardContent>
             </Card>
