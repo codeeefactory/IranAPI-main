@@ -208,6 +208,9 @@ npm run qa:crawl
 - `GET /api/v1/account/profile/`
 - `PATCH /api/v1/account/profile/`
 - `GET /api/v1/account/access/`
+- `GET /api/v1/account/subscription/`
+- `POST /api/v1/account/subscription/`
+- `POST /api/v1/account/subscription/checkout/{checkout_id}/confirm/`
 - `GET /api/v1/account/usage/`
 - `GET /api/v1/account/usage/stats/`
 
@@ -217,12 +220,15 @@ npm run qa:crawl
 - `GET /api/v1/catalog/categories/{slug}/`
 - `GET /api/v1/catalog/categories/{slug}/apis/`
 - `GET /api/v1/catalog/apis/`
+- `POST /api/v1/catalog/apis/`
 - `GET /api/v1/catalog/apis/{slug}/`
 - `GET /api/v1/catalog/apis/{slug}/similar/`
 - `POST /api/v1/catalog/apis/{slug}/ratings/`
 - `GET /api/v1/catalog/apis/{slug}/plans/`
 - `GET /api/v1/catalog/apis/{slug}/docs/`
+- `GET /api/v1/catalog/apis/{slug}/endpoints/`
 - `GET /api/v1/catalog/pricing-plans/`
+- `GET /api/v1/catalog/subscription-plans/`
 - `GET /api/v1/catalog/documentations/`
 
 ### Schema
@@ -232,7 +238,10 @@ npm run qa:crawl
 ## Notes
 
 - Portal auth uses Mongo-backed sessions stored in a dedicated collection.
+- User subscription plans are managed in IranAPI through `/catalog/subscription-plans/` and `/account/subscription/`.
+- Authenticated developers can publish APIs directly through `/catalog/apis/`; released APIs are active and visible in Browse/Explore.
+- API details expose RapidAPI-style endpoint references, sample payloads, code snippets, and browser test console output.
 - Legacy token responses still exist on compatibility auth routes.
 - Local API key generation is disabled by default.
-- Public API access should be treated as IranAPI-managed unless a legacy importer maps old external metadata.
+- Public API access and account subscriptions should be treated as IranAPI-managed unless a legacy importer maps old external metadata.
 - Docker verification still has to be run on a machine with Docker installed.

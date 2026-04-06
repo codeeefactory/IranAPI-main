@@ -16,6 +16,8 @@ rectangle "IranAPI Portal & API Marketplace" {
   usecase "Register portal account" as UC_Register
   usecase "Sign in and sign out" as UC_Auth
   usecase "Manage account and profile" as UC_Profile
+  usecase "Checkout and activate\nsubscription" as UC_Subscribe
+  usecase "Release API to Explore" as UC_Publish
   usecase "Rate an API" as UC_Rate
   usecase "View access grants" as UC_Access
   usecase "View usage stats and history" as UC_Usage
@@ -38,6 +40,8 @@ Developer --> UC_Search
 Developer --> UC_View
 Developer --> UC_Auth
 Developer --> UC_Profile
+Developer --> UC_Subscribe
+Developer --> UC_Publish
 Developer --> UC_Rate
 Developer --> UC_Access
 Developer --> UC_Usage
@@ -52,8 +56,7 @@ RapidAPI --> UC_Schema
 RapidAPI --> UC_PublishAdmin
 
 note bottom of RapidAPI
-RapidAPI subscription, billing, and
-live quota enforcement are outside
-the current IranAPI implementation.
+External marketplace metadata can be mapped,
+but account subscriptions are IranAPI-managed.
 end note
 @enduml

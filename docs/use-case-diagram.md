@@ -1,10 +1,9 @@
 # IranAPI Use Case Diagram
 
-This diagram reflects the current implemented scope of the project after the v1/session-auth and RapidAPI-alignment pass.
+This diagram reflects the current implemented scope of the project after the v1/session-auth, API release, and IranAPI subscription pass.
 
 It intentionally does **not** model:
 
-- local checkout or local billing
 - live RapidAPI webhook ingestion
 - local quota enforcement driven by external subscriptions
 
@@ -30,6 +29,8 @@ flowchart LR
     uc_register(["Register portal account<br/>ثبت نام در پرتال"]):::usecase
     uc_auth(["Sign in and sign out<br/>ورود و خروج"]):::usecase
     uc_profile(["Manage account and profile<br/>مدیریت حساب و پروفایل"]):::usecase
+    uc_subscribe(["Checkout and activate subscription<br/>پرداخت و فعال سازی اشتراک"]):::usecase
+    uc_publish(["Release API to Explore<br/>انتشار API در اکسپلور"]):::usecase
     uc_rate(["Rate an API<br/>امتیازدهی به API"]):::usecase
     uc_access(["View access grants<br/>مشاهده دسترسی ها"]):::usecase
     uc_usage(["View usage stats and history<br/>مشاهده آمار و تاریخچه مصرف"]):::usecase
@@ -52,6 +53,8 @@ flowchart LR
   developer --- uc_view
   developer --- uc_auth
   developer --- uc_profile
+  developer --- uc_subscribe
+  developer --- uc_publish
   developer --- uc_rate
   developer --- uc_access
   developer --- uc_usage
@@ -69,13 +72,14 @@ flowchart LR
 ## Actors
 
 - `Visitor / مهمان`: browses the public catalog, reads documentation, and can create a portal account.
-- `Authenticated Developer / توسعه دهنده`: manages the portal account, views access and usage, and rates APIs.
+- `Authenticated Developer / توسعه دهنده`: manages the portal account, checks out subscription plans, publishes APIs, views access and usage, and rates APIs.
 - `Admin / Operator / ادمین`: manages catalog content, pricing plans, documentation, publication metadata, and access records.
 - `RapidAPI Marketplace / سیستم خارجی`: consumes schema/publication-facing metadata and represents the external marketplace boundary.
 
 ## Notes
 
-- Public API subscription and billing happen outside IranAPI and are currently RapidAPI-managed.
+- User subscription plans are implemented inside IranAPI through checkout sessions and confirmation endpoints in the versioned API.
+- Public API access grants can still map external marketplace metadata, but the primary portal subscription state is IranAPI-managed.
 - Legacy token and API-key routes still exist for compatibility, but they are not the primary use-case model anymore.
 - The canonical system contract for this diagram is the versioned `/api/v1/` API surface.
 
