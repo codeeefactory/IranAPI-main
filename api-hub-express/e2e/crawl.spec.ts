@@ -80,6 +80,7 @@ test("public crawler validates navigation, metadata, and core CTAs", async ({ pa
 
   await page.locator('a[href="/browse"]').first().click();
   await expect(page).toHaveURL(/\/browse$/);
+  await expect(page.locator("main#main-content").last()).toContainText("API در این دسته");
 
   await page.locator("main form input").first().fill("پرداخت");
   await page.locator("main form").getByRole("button").click();
@@ -87,7 +88,10 @@ test("public crawler validates navigation, metadata, and core CTAs", async ({ pa
 
   await page.locator('main a[href^="/api/"]').first().click();
   await expect(page).toHaveURL(/\/api\/.+/);
-  await expect(page.locator("pre code")).toBeVisible();
+  await expect(page.locator("pre code").first()).toBeVisible();
+  await expect(page.getByText("Endpoints")).toBeVisible();
+  await page.getByRole("button", { name: /Run/ }).click();
+  await expect(page.getByText(/"latency_ms"/).last()).toBeVisible();
   await page.getByRole("button").filter({ hasText: "کپی" }).click();
 
   await gotoApp(page, "/pricing");
@@ -150,6 +154,30 @@ test("authenticated crawler validates register, login, dashboard forms, rating, 
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.locator("#company")).toHaveValue(/IranAPI/);
   await expect(page.locator("main")).toContainText("درخواست");
+  await expect(page.locator("main")).toContainText("اشتراک حساب");
+
+  await gotoApp(page, "/pricing");
+  await expect(page.locator('a[href^="/payment?subscription="]').first()).toBeVisible();
+  await page.locator('a[href^="/payment?subscription="]').nth(1).click();
+  await expect(page).toHaveURL(/\/payment\?subscription=/);
+  await page.getByRole("button", { name: /فعال‌سازی اشتراک/ }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.locator("main")).toContainText("Growth");
+
+  const apiName = `QA Release ${uniqueSuffix}`;
+  await page.locator("#api-name").fill(apiName);
+  await page.locator("#api-base-url").fill(`https://qa-release-${uniqueSuffix}.example.dev/v1`);
+  await page.locator("#api-docs").fill(`https://qa-release-${uniqueSuffix}.example.dev/docs`);
+  await page.locator("#api-category").fill("QA");
+  await page.locator("#api-tags").fill("qa, release");
+  await page.locator("#api-description").fill("Published by the Playwright crawler and visible in Explore.");
+  await page.getByRole("button", { name: /انتشار API/ }).click();
+  await expect(page.getByRole("link", { name: "مشاهده در Explore" }).first()).toBeVisible();
+  await page.getByRole("link", { name: "مشاهده در Explore" }).first().click();
+  await expect(page).toHaveURL(/\/api\/qa-release-/);
+  await expect(page.locator("h1")).toContainText(apiName);
+
+  await gotoApp(page, "/dashboard");
 
   await page.locator("#first_name").fill("راستی‌آزمایی");
   await page.locator('button[type="submit"]').nth(0).click();
