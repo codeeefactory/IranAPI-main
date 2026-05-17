@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <rect width="1200" height="630" rx="36" fill="#F4F7FB"/>
+  <rect x="48" y="48" width="1104" height="534" rx="32" fill="url(#paint0_linear)"/>
+  <rect x="96" y="96" width="1008" height="438" rx="28" fill="#FFFFFF" fill-opacity="0.82"/>
+  <circle cx="206" cy="174" r="42" fill="#155EEF" fill-opacity="0.12"/>
+  <circle cx="996" cy="448" r="76" fill="#7C3AED" fill-opacity="0.08"/>
+  <text x="138" y="234" fill="#0F172A" font-family="Segoe UI, Tahoma, sans-serif" font-size="78" font-weight="700">IranAPI</text>
+  <text x="138" y="318" fill="#334155" font-family="Segoe UI, Tahoma, sans-serif" font-size="34" font-weight="500">
+    پرتال توسعه‌دهندگان و بازار API
+  </text>
+  <text x="138" y="384" fill="#475569" font-family="Segoe UI, Tahoma, sans-serif" font-size="28">
+    مستندات شفاف، فهرست زنده سرویس‌ها و تجربه‌ای مناسب برای تیم‌های فنی
+  </text>
+  <defs>
+    <linearGradient id="paint0_linear" x1="48" y1="48" x2="1152" y2="582" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#DBEAFE"/>
+      <stop offset="0.48" stop-color="#E2E8F0"/>
+      <stop offset="1" stop-color="#EDE9FE"/>
+    </linearGradient>
+  </defs>
+</svg>

@@ -1,0 +1,10 @@
+asgiref==3.10.0
+Django==5.2.8
+django-cors-headers==4.9.0
+djangorestframework==3.16.1
+gunicorn>=23,<24
+mongomock>=4.3,<5
+psycopg[binary]>=3.2,<4
+pymongo>=4.10,<5
+sqlparse==0.5.3
+whitenoise>=6.8,<7

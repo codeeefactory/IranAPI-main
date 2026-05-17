@@ -1,0 +1,49 @@
+@startuml
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+
+actor "Backend API Layer" as Backend
+actor "Admin / Operator" as Admin
+
+rectangle "IranAPI Database" {
+  usecase "Store and retrieve\nuser account records" as UC_User
+  usecase "Store and update\nuser profile records" as UC_Profile
+  usecase "Read public catalog data\n(categories and APIs)" as UC_CatalogRead
+  usecase "Maintain catalog records\n(categories and APIs)" as UC_CatalogWrite
+  usecase "Read pricing plans and\ndocumentation records" as UC_ContentRead
+  usecase "Maintain pricing plans and\ndocumentation records" as UC_ContentWrite
+  usecase "Persist API ratings and\nrefresh rating aggregates" as UC_Rating
+  usecase "Store access grant records" as UC_AccessGrant
+  usecase "Store usage records and\ncalculate usage statistics" as UC_Usage
+  usecase "Store publication metadata\nfor marketplace readiness" as UC_Publication
+}
+
+Backend --> UC_User
+Backend --> UC_Profile
+Backend --> UC_CatalogRead
+Backend --> UC_ContentRead
+Backend --> UC_Rating
+Backend --> UC_AccessGrant
+Backend --> UC_Usage
+Backend --> UC_Publication
+
+Admin --> UC_CatalogWrite
+Admin --> UC_ContentWrite
+Admin --> UC_AccessGrant
+Admin --> UC_Publication
+Admin --> UC_Usage
+
+UC_CatalogWrite .> UC_CatalogRead : <<include>>
+UC_ContentWrite .> UC_ContentRead : <<include>>
+UC_Rating .> UC_CatalogRead : <<include>>
+UC_Usage .> UC_AccessGrant : <<include>>
+UC_Profile .> UC_User : <<include>>
+
+note bottom of Backend
+All application reads and writes reach the database
+through Django models, serializers, views, and admin flows.
+End users do not access the database directly.
+end note
+@enduml

@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /signin
+Disallow: /signup
+Disallow: /dashboard
+Disallow: /payment
+Sitemap: /sitemap.xml

@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    env:
+      DJANGO_DEBUG: "true"
+      MONGODB_USE_MOCK: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+
+      - name: Django checks
+        run: python manage.py check
+
+      - name: Migration drift check
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Backend tests
+        run: python manage.py test
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api-hub-express
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: api-hub-express/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Frontend tests
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+  smoke:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    env:
+      DJANGO_DEBUG: "true"
+      MONGODB_USE_MOCK: "true"
+    defaults:
+      run:
+        working-directory: api-hub-express
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+        working-directory: .
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: api-hub-express/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Localhost smoke crawl
+        run: npm run qa:crawl

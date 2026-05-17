@@ -1,0 +1,5 @@
+2026-05-12 19:08:22,128 INFO [api] Sample QA data is ready for local validation.
+C:\Users\Sadjad Rgz\AppData\Roaming\Python\Python312\site-packages\django\core\handlers\base.py:61: UserWarning: No directory at: C:\Users\Sadjad Rgz\Downloads\IranAPI-main\IranAPI-main\staticfiles\
+  mw_instance = middleware(adapted_handler)
+2026-05-12 19:08:29,965 INFO [django.server] "GET / HTTP/1.1" 200 8488
+2026-05-12 19:08:29,986 INFO [django.server] "GET /api/v1/system/health/ HTTP/1.1" 200 57

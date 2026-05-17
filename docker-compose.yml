@@ -1,0 +1,109 @@
+name: iranapi
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: iranapi-mongo
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend-runtime
+    container_name: iranapi-backend
+    init: true
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017}
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-iranapi}
+      MONGODB_USE_MOCK: "${MONGODB_USE_MOCK:-false}"
+      DJANGO_DEBUG: "${DJANGO_DEBUG:-true}"
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-before-production-use}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0,backend,frontend}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      DJANGO_SECURE_SSL_REDIRECT: "${DJANGO_SECURE_SSL_REDIRECT:-false}"
+      API_ANON_THROTTLE_RATE: ${API_ANON_THROTTLE_RATE:-600/minute}
+      API_USER_THROTTLE_RATE: ${API_USER_THROTTLE_RATE:-1200/minute}
+      IRANAPI_ENABLE_LEGACY_API_KEYS: "${IRANAPI_ENABLE_LEGACY_API_KEYS:-false}"
+      IRANAPI_AUTO_SEED_SAMPLE_DATA: "${IRANAPI_AUTO_SEED_SAMPLE_DATA:-false}"
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - static_data:/app/staticfiles
+      - media_data:/app/media
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/system/health/', timeout=5)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend-runtime
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+    container_name: iranapi-frontend
+    init: true
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    volumes:
+      - static_data:/var/www/static:ro
+      - media_data:/var/www/media:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  mongo-express:
+    image: mongo-express:1.0.2-20
+    container_name: iranapi-mongo-express
+    init: true
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      ME_CONFIG_BASICAUTH: "${MONGO_EXPRESS_BASICAUTH:-true}"
+      ME_CONFIG_BASICAUTH_USERNAME: "${MONGO_EXPRESS_USERNAME:-iranapi}"
+      ME_CONFIG_BASICAUTH_PASSWORD: "${MONGO_EXPRESS_PASSWORD:-change-me}"
+      ME_CONFIG_MONGODB_URL: ${MONGODB_URI:-mongodb://mongo:27017}
+    ports:
+      - "${MONGO_EXPRESS_PORT:-8081}:8081"
+    profiles:
+      - tools
+
+volumes:
+  mongo_data:
+  static_data:
+  media_data:
